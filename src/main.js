@@ -182,20 +182,20 @@ let lastFrameTime = performance.now();
 
 const moods = {
   dawn: {
-    background: new THREE.Color("#e8dcc0"),
-    skyTop: new THREE.Color("#d9ded6"),
-    skyBottom: new THREE.Color("#c2a97e"),
-    fog: new THREE.Color("#e8dcc0"),
-    hemiSky: new THREE.Color("#fff1cd"),
-    hemiGround: new THREE.Color("#567080"),
+    background: new THREE.Color("#c9a877"),
+    skyTop: new THREE.Color("#8fa6ab"),
+    skyBottom: new THREE.Color("#a97f4e"),
+    fog: new THREE.Color("#c9a877"),
+    hemiSky: new THREE.Color("#ffeec2"),
+    hemiGround: new THREE.Color("#4a626f"),
     indigo: new THREE.Color("#24475c"),
     key: new THREE.Color("#ffd89a"),
-    rim: new THREE.Color("#7ca0ad"),
-    under: new THREE.Color("#425b68"),
+    rim: new THREE.Color("#6d919f"),
+    under: new THREE.Color("#3d5561"),
     vermilion: new THREE.Color("#c94b32"),
     gold: new THREE.Color("#b88a32"),
-    particles: new THREE.Color("#f3dfad"),
-    exposure: 0.98
+    particles: new THREE.Color("#f0d69c"),
+    exposure: 0.96
   },
   midnight: {
     background: new THREE.Color("#0d202d"),
@@ -219,9 +219,9 @@ let activeMood = "dawn";
 const skyGeometry = new THREE.SphereGeometry(78, 32, 16);
 const skyMaterial = new THREE.ShaderMaterial({
   uniforms: {
-    uTop: { value: new THREE.Color("#f0e4c8") },
-    uHorizon: { value: new THREE.Color("#e8dcc0") },
-    uBottom: { value: new THREE.Color("#cdb98d") }
+    uTop: { value: new THREE.Color("#8fa6ab") },
+    uHorizon: { value: new THREE.Color("#c9a877") },
+    uBottom: { value: new THREE.Color("#a97f4e") }
   },
   vertexShader: `varying vec3 vDirection;
 void main(){
@@ -392,8 +392,8 @@ const oceanMaterial = createPaperMaterial("#d6bf8d", "#2b4b5c", {
   bumpMap: paperTexture,
   bumpScale: 0.045
 });
-const creamMaterial = createPaperMaterial("#f1dfb8", "#b9c8c3");
-const innerMaterial = createPaperMaterial("#f6e7c8", "#d8cba9");
+const creamMaterial = createPaperMaterial("#e2c99c", "#a8b7b2");
+const innerMaterial = createPaperMaterial("#ecd9ac", "#c6b795");
 const vermilionMaterial = createPaperMaterial("#c94b32", "#e15a3d");
 const indigoMaterial = createPaperMaterial("#24475c", "#547d96");
 const goldMaterial = createPaperMaterial("#b88a32", "#d7ac57", { roughness: 0.68 });
@@ -420,19 +420,16 @@ function geometryFromTriangles(triangles) {
   return geometry;
 }
 
-function addCreaseShader(material, strength, rim) {
-  const rimInjection = rim
-    ? `\nfloat rimFade = smoothstep(${rim.start.toFixed(2)}, ${rim.end.toFixed(2)}, vPaperRadius);\ndiffuseColor.rgb = mix(diffuseColor.rgb, fogColor, rimFade * ${rim.strength.toFixed(3)});`
-    : "";
+function addCreaseShader(material, strength) {
   material.onBeforeCompile = (shader) => {
     shader.vertexShader = shader.vertexShader
-      .replace("#include <common>", "#include <common>\nattribute vec3 barycentric;\nvarying vec3 vCrease;\nvarying float vPaperRadius;")
-      .replace("#include <begin_vertex>", "#include <begin_vertex>\nvCrease = barycentric;\nvPaperRadius = length(position.xz);");
+      .replace("#include <common>", "#include <common>\nattribute vec3 barycentric;\nvarying vec3 vCrease;")
+      .replace("#include <begin_vertex>", "#include <begin_vertex>\nvCrease = barycentric;");
     shader.fragmentShader = shader.fragmentShader
-      .replace("#include <common>", "#include <common>\nvarying vec3 vCrease;\nvarying float vPaperRadius;")
-      .replace("#include <color_fragment>", `#include <color_fragment>\nfloat creaseEdge = min(min(vCrease.x, vCrease.y), vCrease.z);\nfloat creaseAA = max(fwidth(creaseEdge), 0.0008);\nfloat creaseLine = 1.0 - smoothstep(creaseAA * 0.25, creaseAA * 1.55, creaseEdge);\ndiffuseColor.rgb *= 1.0 - creaseLine * ${strength.toFixed(3)};${rimInjection}`);
+      .replace("#include <common>", "#include <common>\nvarying vec3 vCrease;")
+      .replace("#include <color_fragment>", `#include <color_fragment>\nfloat creaseEdge = min(min(vCrease.x, vCrease.y), vCrease.z);\nfloat creaseAA = max(fwidth(creaseEdge), 0.0008);\nfloat creaseLine = 1.0 - smoothstep(creaseAA * 0.25, creaseAA * 1.55, creaseEdge);\ndiffuseColor.rgb *= 1.0 - creaseLine * ${strength.toFixed(3)};`);
   };
-  material.customProgramCacheKey = () => `paper-creases-${strength}-${rim ? rim.start : "flat"}`;
+  material.customProgramCacheKey = () => `paper-creases-${strength}`;
 }
 
 function createOceanGeometry() {
@@ -517,7 +514,7 @@ const oceanGeometry = createOceanGeometry();
 const ocean = new THREE.Mesh(oceanGeometry, oceanMaterial);
 ocean.name = "faceted paper ocean";
 scene.add(ocean);
-addCreaseShader(oceanMaterial, 0.035, { start: 20.6, end: 23.5, strength: 0.82 });
+addCreaseShader(oceanMaterial, 0.035);
 
 const oceanBase = new Float32Array(oceanGeometry.attributes.position.array);
 const oceanColors = oceanGeometry.attributes.color.array;
@@ -832,7 +829,7 @@ const mergedCraneGeometry = mergeCraneParts([
   { geometry: craneBeakGeometry, matrix: beakMatrix },
   { geometry: craneTailGeometry, matrix: tailMatrix }
 ]);
-const craneMaterial = createPaperMaterial("#f1dfb8", "#b9c8c3", { side: THREE.DoubleSide });
+const craneMaterial = createPaperMaterial("#e2c99c", "#a8b7b2", { side: THREE.DoubleSide });
 const craneCount = qualityTier === "light" ? 7 : craneSpecs.length;
 const craneInstances = new THREE.InstancedMesh(mergedCraneGeometry, craneMaterial, craneCount);
 craneInstances.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -840,7 +837,7 @@ craneInstances.frustumCulled = false;
 craneInstances.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 5, 0), 26);
 scene.add(craneInstances);
 occlusionTargets.push(craneInstances);
-const craneColors = [new THREE.Color("#f1dfb8"), new THREE.Color("#c94b32"), new THREE.Color("#24475c"), new THREE.Color("#b88a32")];
+const craneColors = [new THREE.Color("#e2c99c"), new THREE.Color("#c94b32"), new THREE.Color("#24475c"), new THREE.Color("#b88a32")];
 const craneTransform = new THREE.Object3D();
 
 for (let index = 0; index < craneCount; index += 1) {
@@ -877,8 +874,8 @@ lotusBaseGeometry.rotateX(-Math.PI / 2);
 const lotusHeartGeometry = new THREE.IcosahedronGeometry(0.2, 1);
 const lotusCount = qualityTier === "light" ? 4 : lotusSpecs.length;
 const petalCount = lotusCount * 15;
-const lotusPetalMaterial = createPaperMaterial("#f1dfb8", "#b9c8c3", { side: THREE.DoubleSide });
-const lotusBaseMaterial = createPaperMaterial("#f1dfb8", "#b9c8c3", { side: THREE.DoubleSide });
+const lotusPetalMaterial = createPaperMaterial("#e2c99c", "#a8b7b2", { side: THREE.DoubleSide });
+const lotusBaseMaterial = createPaperMaterial("#e2c99c", "#a8b7b2", { side: THREE.DoubleSide });
 const lotusHeartMaterial = createPaperMaterial("#b88a32", "#d7ac57", { side: THREE.DoubleSide });
 const lotusPetalInstances = new THREE.InstancedMesh(petalGeometry, lotusPetalMaterial, petalCount);
 const lotusBaseInstances = new THREE.InstancedMesh(lotusBaseGeometry, lotusBaseMaterial, lotusCount);
@@ -898,7 +895,7 @@ lotusHeartInstances.userData.lotusKind = "heart";
 scene.add(lotusPetalInstances, lotusBaseInstances, lotusHeartInstances);
 lotusHitMeshes.push(lotusPetalInstances, lotusHeartInstances, lotusBaseInstances);
 const lotusTransform = new THREE.Object3D();
-const lotusPetalColors = [new THREE.Color("#f1dfb8"), new THREE.Color("#f6e7c8"), new THREE.Color("#c94b32"), new THREE.Color("#24475c")];
+const lotusPetalColors = [new THREE.Color("#e2c99c"), new THREE.Color("#ecd9ac"), new THREE.Color("#c94b32"), new THREE.Color("#24475c")];
 
 for (let flowerIndex = 0; flowerIndex < lotusCount; flowerIndex += 1) {
   const spec = lotusSpecs[flowerIndex];
