@@ -90,46 +90,39 @@ export function createLandmarks({ THREE, scene, qualityTier, materials, occluder
     return geometry;
   }
 
+  function foldedSail(height, width, depth) {
+    const half = width * 0.5;
+    const apex = [0, height, 0];
+    const front = [half, height * 0.42, depth];
+    const back = [-half * 0.7, height * 0.5, -depth * 0.4];
+    return geometryFromTriangles([
+      [[0, 0, 0], apex, front],
+      [[0, 0, 0], front, back],
+      [apex, back, front]
+    ]);
+  }
+
   const cathedral = new THREE.Group();
   cathedral.position.set(REGIONS[0].x, 0, REGIONS[0].z);
   const cathedralSpin = new THREE.Group();
   cathedral.add(cathedralSpin);
 
-  const tiers = [];
-  const tierSpecs = [
-    { size: 3.1, rise: 1.55, skew: 0.55 },
-    { size: 2.4, rise: 1.32, skew: -0.42 },
-    { size: 1.82, rise: 1.16, skew: 0.36 },
-    { size: 1.32, rise: 1.02, skew: -0.28 }
-  ];
-  let tierBase = 0;
-
-  for (let index = 0; index < tierSpecs.length; index += 1) {
-    const spec = tierSpecs[index];
-    const mesh = new THREE.Mesh(foldedPlate(spec.size, spec.rise, spec.skew), index < 3 ? materials.cream : materials.vermilion);
-    mesh.position.y = tierBase;
-    mesh.rotation.y = index * 0.44;
+  const spireParts = [];
+  function addSpirePart(size, rise, skew, y, material) {
+    const mesh = new THREE.Mesh(foldedPlate(size, rise, skew), material);
+    mesh.position.y = y;
+    mesh.rotation.y = spireParts.length * 0.52;
     cathedralSpin.add(mesh);
     occluders.push(mesh);
-    tiers.push({ mesh, phase: index * 0.9 });
-    tierBase += spec.rise * 0.76;
+    spireParts.push({ mesh, phase: spireParts.length * 0.85 });
   }
 
-  const buttressGeometry = foldedPlate(2.9, 3.5, 0.12);
-  for (const side of [-1, 1]) {
-    const buttress = new THREE.Mesh(buttressGeometry, materials.indigo);
-    buttress.position.set(side * 1.45, 0, -0.15);
-    buttress.rotation.set(0, Math.PI * 0.5, side * -0.15);
-    buttress.scale.set(0.3, 1, 1.05);
-    cathedral.add(buttress);
-    occluders.push(buttress);
-  }
-
-  const crown = new THREE.Mesh(new THREE.ConeGeometry(0.46, 2, 4, 1, false), materials.vermilion);
-  crown.position.y = tierBase + 0.72;
-  crown.rotation.y = 0.4;
-  cathedralSpin.add(crown);
-  anchors.push({ x: REGIONS[0].x, z: REGIONS[0].z, scale: 1.75 });
+  addSpirePart(4, 0.45, 0.3, 0, materials.cream);
+  addSpirePart(2.7, 3.6, 0.35, 0.35, materials.cream);
+  addSpirePart(3.1, 0.35, -0.25, 1.5, materials.indigo);
+  addSpirePart(2.4, 0.3, 0.2, 2.9, materials.indigo);
+  addSpirePart(0.85, 1.45, 0.15, 3.9, materials.vermilion);
+  anchors.push({ x: REGIONS[0].x, z: REGIONS[0].z, scale: 1.95 });
 
   const lagoon = new THREE.Group();
   lagoon.position.set(REGIONS[1].x, 0, REGIONS[1].z);
@@ -165,8 +158,7 @@ export function createLandmarks({ THREE, scene, qualityTier, materials, occluder
   shoals.add(spillwayMesh);
 
   const shoalCount = qualityTier === "light" ? 5 : 8;
-  const shardGeometry = new THREE.ConeGeometry(0.62, 2.2, 4, 1, false);
-  shardGeometry.translate(0, 1.1, 0);
+  const shardGeometry = foldedSail(2.9, 1.05, 0.34);
   const shards = new THREE.InstancedMesh(shardGeometry, materials.gold, shoalCount);
   shards.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   shards.frustumCulled = false;
@@ -196,10 +188,10 @@ export function createLandmarks({ THREE, scene, qualityTier, materials, occluder
 
   function update(sceneTime, motion) {
     cathedralSpin.rotation.y = 0.16 + Math.sin(sceneTime * 0.047) * 0.07 * motion;
-    for (let index = 0; index < tiers.length; index += 1) {
-      tiers[index].mesh.scale.y = 1 + Math.sin(sceneTime * 0.4 + tiers[index].phase) * 0.045 * motion;
+    cathedralSpin.rotation.z = Math.sin(sceneTime * 0.23) * 0.014 * motion;
+    for (let index = 0; index < spireParts.length; index += 1) {
+      spireParts[index].mesh.scale.y = 1 + Math.sin(sceneTime * 0.4 + spireParts[index].phase) * 0.04 * motion;
     }
-    crown.rotation.y = 0.4 + sceneTime * 0.13 * motion;
 
     for (let index = 0; index < reedSpecs.length; index += 1) {
       const reed = reedSpecs[index];

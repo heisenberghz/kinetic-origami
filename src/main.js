@@ -738,7 +738,8 @@ const islandSpecs = [
   [-1.6, -6.0, 0.62, 2], [-6.6, -5.6, 0.5, 1], [0.6, -9.4, 0.55, 0],
   [-13.0, 2.2, 0.6, 1], [-6.6, 7.4, 0.52, 0], [-11.8, 8.2, 0.44, 2],
   [12.0, 0.8, 0.58, 2], [5.6, 6.8, 0.5, 0], [12.4, 6.0, 0.42, 1],
-  [0.0, 6.5, 0.62, 1], [-2.0, 0.0, 0.7, 0]
+  [0.0, 6.5, 0.62, 1], [-2.0, 0.0, 0.7, 0],
+  [2.5, 9.0, 0.66, 2], [-2.0, 11.0, 0.5, 1]
 ];
 
 for (let index = 0; index < islandSpecs.length; index += 1) {
@@ -782,7 +783,7 @@ const landmarks = createLandmarks({
   }
 });
 
-const foregroundSails = new THREE.InstancedMesh(sailGeometry, indigoMaterial, 2);
+const foregroundSails = new THREE.InstancedMesh(sailGeometry, innerMaterial, 2);
 foregroundSails.instanceMatrix.setUsage(THREE.StaticDrawUsage);
 foregroundSails.frustumCulled = false;
 const foregroundTransform = new THREE.Object3D();
@@ -797,7 +798,7 @@ for (let index = 0; index < foregroundSailSpecs.length; index += 1) {
   foregroundTransform.scale.set(scale, scale, scale);
   foregroundTransform.updateMatrix();
   foregroundSails.setMatrixAt(index, foregroundTransform.matrix);
-  foregroundSails.setColorAt(index, index ? new THREE.Color("#c94b32") : new THREE.Color("#24475c"));
+    foregroundSails.setColorAt(index, index ? new THREE.Color("#c94b32") : new THREE.Color("#b88a32"));
 }
 foregroundSails.instanceMatrix.needsUpdate = true;
 foregroundSails.instanceColor.needsUpdate = true;
@@ -2176,7 +2177,7 @@ function updateManta(delta) {
   mantaShadow.position.z = manta.position.z;
   mantaShadow.position.y = 0.17 + (manta.position.y - oldY) * 0.04;
   mantaShadow.scale.set(1.8 + Math.max(0, manta.position.y - 3.4) * 0.07, 0.9, 1);
-  shadowMaterial.opacity = clamp(0.15 - Math.max(0, manta.position.y - 3.6) * 0.012, 0.06, 0.15);
+  shadowMaterial.opacity = clamp(0.11 - Math.max(0, manta.position.y - 3.6) * 0.011, 0.04, 0.11);
 }
 
 function updateLotus(delta) {
