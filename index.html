@@ -1190,16 +1190,19 @@ gl_FragColor=vec4(color,1.0);
       return geometry;
     }
 
-    function addCreaseShader(material, strength) {
+    function addCreaseShader(material, strength, rim) {
+      const rimInjection = rim
+        ? `\nfloat rimFade = smoothstep(${rim.start.toFixed(2)}, ${rim.end.toFixed(2)}, vPaperRadius);\ndiffuseColor.rgb = mix(diffuseColor.rgb, fogColor, rimFade * ${rim.strength.toFixed(3)});`
+        : "";
       material.onBeforeCompile = (shader) => {
         shader.vertexShader = shader.vertexShader
-          .replace("#include <common>", "#include <common>\nattribute vec3 barycentric;\nvarying vec3 vCrease;")
-          .replace("#include <begin_vertex>", "#include <begin_vertex>\nvCrease = barycentric;");
+          .replace("#include <common>", "#include <common>\nattribute vec3 barycentric;\nvarying vec3 vCrease;\nvarying float vPaperRadius;")
+          .replace("#include <begin_vertex>", "#include <begin_vertex>\nvCrease = barycentric;\nvPaperRadius = length(position.xz);");
         shader.fragmentShader = shader.fragmentShader
-          .replace("#include <common>", "#include <common>\nvarying vec3 vCrease;")
-          .replace("#include <color_fragment>", `#include <color_fragment>\nfloat creaseEdge = min(min(vCrease.x, vCrease.y), vCrease.z);\nfloat creaseAA = max(fwidth(creaseEdge), 0.0008);\nfloat creaseLine = 1.0 - smoothstep(creaseAA * 0.25, creaseAA * 1.55, creaseEdge);\ndiffuseColor.rgb *= 1.0 - creaseLine * ${strength.toFixed(3)};`);
+          .replace("#include <common>", "#include <common>\nvarying vec3 vCrease;\nvarying float vPaperRadius;")
+          .replace("#include <color_fragment>", `#include <color_fragment>\nfloat creaseEdge = min(min(vCrease.x, vCrease.y), vCrease.z);\nfloat creaseAA = max(fwidth(creaseEdge), 0.0008);\nfloat creaseLine = 1.0 - smoothstep(creaseAA * 0.25, creaseAA * 1.55, creaseEdge);\ndiffuseColor.rgb *= 1.0 - creaseLine * ${strength.toFixed(3)};${rimInjection}`);
       };
-      material.customProgramCacheKey = () => `paper-creases-${strength}`;
+      material.customProgramCacheKey = () => `paper-creases-${strength}-${rim ? rim.start : "flat"}`;
     }
 
     function createOceanGeometry() {
@@ -1284,13 +1287,30 @@ gl_FragColor=vec4(color,1.0);
     const ocean = new THREE.Mesh(oceanGeometry, oceanMaterial);
     ocean.name = "faceted paper ocean";
     scene.add(ocean);
-    addCreaseShader(oceanMaterial, 0.035);
+    addCreaseShader(oceanMaterial, 0.035, { start: 20.6, end: 23.5, strength: 0.82 });
 
     const oceanBase = new Float32Array(oceanGeometry.attributes.position.array);
     const oceanColors = oceanGeometry.attributes.color.array;
     const oceanBaseColors = new Float32Array(oceanColors);
     const oceanDisplacement = new Float32Array(oceanBase.length / 3);
     const oceanVelocity = new Float32Array(oceanBase.length / 3);
+    const oceanVertexCount = oceanBase.length / 3;
+    const oceanSwellTerms = 4;
+    const oceanSwellRate = new Float32Array([0.58, -0.41, 0.83, 0.26]);
+    const oceanSwellGain = new Float32Array([0.1, 0.09, 0.032, 0.055]);
+    const oceanSwellSpace = new Float32Array(oceanVertexCount * oceanSwellTerms);
+    const oceanSwellCos = new Float32Array(oceanVertexCount * oceanSwellTerms);
+    const halfPi = Math.PI * 0.5;
+
+    for (let index = 0; index < oceanVertexCount; index += 1) {
+      const x = oceanBase[index * 3];
+      const z = oceanBase[index * 3 + 2];
+      const spatial = [x * 0.43, z * 0.36 + halfPi, (x + z) * 0.72, x * 0.18 - z * 0.23];
+      for (let term = 0; term < oceanSwellTerms; term += 1) {
+        oceanSwellSpace[index * oceanSwellTerms + term] = Math.sin(spatial[term]);
+        oceanSwellCos[index * oceanSwellTerms + term] = Math.cos(spatial[term]);
+      }
+    }
     const creaseFieldResolution = qualityTier === "light" ? 49 : 65;
     const creaseFieldSize = 48;
     const creaseFieldStep = creaseFieldSize / (creaseFieldResolution - 1);
@@ -1395,24 +1415,41 @@ gl_FragColor=vec4(color,inner*uOpacity);
 
     const horizonLayers = [];
     function createHorizonLayer(dayColor, nightColor, opacity, z, height, phase, parallax) {
-      const segments = 22;
+      const segments = 84;
       const width = 92;
       const positions = [];
+      const fades = [];
       const indices = [];
+
       for (let index = 0; index <= segments; index += 1) {
-        const x = -width * 0.5 + width * index / segments;
-        const ridge = height * (0.42 + Math.sin(index * 1.71 + phase) * 0.18 + Math.sin(index * 0.63 - phase) * 0.12);
-        positions.push(x, -5.5, 0, x, ridge, 0);
+        const u = index / segments;
+        const x = -width * 0.5 + width * u;
+        const ridge = height * (0.42 + Math.sin(u * 37.62 + phase) * 0.18 + Math.sin(u * 13.86 - phase) * 0.12);
+        positions.push(x, -1.6, 0, x, -0.15, 0, x, ridge, 0);
+        fades.push(0, 1, 1);
         if (index < segments) {
-          const current = index * 2;
-          indices.push(current, current + 1, current + 2, current + 1, current + 3, current + 2);
+          const current = index * 3;
+          const next = current + 3;
+          indices.push(current, current + 1, next, current + 1, next + 1, next);
+          indices.push(current + 1, current + 2, next + 1, current + 2, next + 2, next + 1);
         }
       }
+
       const geometry = new THREE.BufferGeometry();
       geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+      geometry.setAttribute("aFade", new THREE.Float32BufferAttribute(fades, 1));
       geometry.setIndex(indices);
       const material = new THREE.MeshBasicMaterial({ color: dayColor, transparent: true, opacity, depthWrite: false, side: THREE.DoubleSide, fog: true });
       material.forceSinglePass = true;
+      material.onBeforeCompile = (shader) => {
+        shader.vertexShader = shader.vertexShader
+          .replace("#include <common>", "#include <common>\nattribute float aFade;\nvarying float vFade;")
+          .replace("#include <begin_vertex>", "#include <begin_vertex>\nvFade = aFade;");
+        shader.fragmentShader = shader.fragmentShader
+          .replace("#include <common>", "#include <common>\nvarying float vFade;")
+          .replace("#include <color_fragment>", "#include <color_fragment>\ndiffuseColor.a *= vFade;");
+      };
+      material.customProgramCacheKey = () => "horizon-base-fade";
       const mesh = new THREE.Mesh(geometry, material);
       mesh.position.set(0, -0.32, z);
       mesh.renderOrder = -1;
@@ -1527,20 +1564,36 @@ gl_FragColor=vec4(color,inner*uOpacity);
     occlusionTargets.push(foregroundSails);
 
     const mantaWingGeometry = geometryFromTriangles([
-      [[0, 0, -0.3], [-0.68, 0.14, 0.08], [0, 0, 1.02]],
-      [[-0.68, 0.14, 0.08], [-0.48, 0.16, 0.74], [0, 0, 1.02]],
-      [[-0.68, 0.14, 0.08], [-1.52, 0.04, 0.48], [-0.48, 0.16, 0.74]],
-      [[-1.52, 0.04, 0.48], [-3.05, 0.13, 1.12], [-0.48, 0.16, 0.74]],
-      [[-1.52, 0.04, 0.48], [-1.17, -0.02, 1.38], [-3.05, 0.13, 1.12]],
-      [[-1.17, -0.02, 1.38], [0, 0, 1.02], [-3.05, 0.13, 1.12]],
-      [[-1.17, -0.02, 1.38], [-0.48, 0.16, 0.74], [0, 0, 1.02]]
+      [[0, 0.06, -0.3], [-0.68, 0.3, 0.08], [0, 0.02, 1.02]],
+      [[-0.68, 0.3, 0.08], [-0.48, 0.42, 0.74], [0, 0.02, 1.02]],
+      [[-0.68, 0.3, 0.08], [-1.52, 0.2, 0.48], [-0.48, 0.42, 0.74]],
+      [[-1.52, 0.2, 0.48], [-3.05, 0.34, 1.12], [-0.48, 0.42, 0.74]],
+      [[-1.52, 0.2, 0.48], [-1.17, 0.14, 1.38], [-3.05, 0.34, 1.12]],
+      [[-1.17, 0.14, 1.38], [0, 0.02, 1.02], [-3.05, 0.34, 1.12]],
+      [[-1.17, 0.14, 1.38], [-0.48, 0.42, 0.74], [0, 0.02, 1.02]],
+      [[0, -0.05, -0.3], [0, -0.05, 1.02], [-0.68, 0.19, 0.08]],
+      [[-0.68, 0.19, 0.08], [0, -0.05, 1.02], [-1.52, 0.09, 0.48]],
+      [[-1.52, 0.09, 0.48], [0, -0.05, 1.02], [-3.05, 0.23, 1.12]],
+      [[0, 0.06, -0.3], [-0.68, 0.19, 0.08], [0, 0.06, 1.02]],
+      [[0, 0.06, 1.02], [-0.68, 0.19, 0.08], [-1.52, 0.09, 0.48]],
+      [[-1.52, 0.09, 0.48], [-0.68, 0.19, 0.08], [-3.05, 0.23, 1.12]],
+      [[-1.52, 0.09, 0.48], [-3.05, 0.23, 1.12], [0, 0.06, 1.02]],
+      [[-0.68, 0.3, 0.08], [-0.68, 0.19, 0.08], [0, 0.06, -0.3]],
+      [[-0.68, 0.19, 0.08], [0, -0.05, -0.3], [0, 0.06, -0.3]],
+      [[-0.68, 0.3, 0.08], [-1.52, 0.2, 0.48], [-1.52, 0.09, 0.48]],
+      [[-1.52, 0.09, 0.48], [-0.68, 0.19, 0.08], [-0.68, 0.3, 0.08]],
+      [[-1.52, 0.2, 0.48], [-3.05, 0.34, 1.12], [-3.05, 0.23, 1.12]],
+      [[-3.05, 0.23, 1.12], [-1.52, 0.09, 0.48], [-1.52, 0.2, 0.48]],
+      [[-3.05, 0.34, 1.12], [0, 0.02, 1.02], [0, -0.05, 1.02]],
+      [[0, -0.05, 1.02], [0, 0.02, 1.02], [-3.05, 0.23, 1.12]],
+      [[-3.05, 0.23, 1.12], [0, 0.02, 1.02], [-3.05, 0.34, 1.12]]
     ]);
     const mantaAccentGeometry = geometryFromTriangles([
-      [[-0.46, 0.17, 0.1], [-1.42, 0.075, 0.47], [-0.65, 0.19, 0.83]],
-      [[-1.42, 0.075, 0.47], [-2.45, 0.15, 0.94], [-0.65, 0.19, 0.83]]
+      [[-0.46, 0.44, 0.1], [-1.42, 0.25, 0.47], [-0.65, 0.37, 0.83]],
+      [[-1.42, 0.25, 0.47], [-2.45, 0.31, 0.94], [-0.65, 0.37, 0.83]]
     ]);
     const mantaBodyGeometry = new THREE.OctahedronGeometry(0.78, 0);
-    mantaBodyGeometry.scale(0.72, 0.28, 1.6);
+    mantaBodyGeometry.scale(0.72, 0.42, 1.6);
     const mantaTailGeometry = geometryFromTriangles([
       [[-0.12, 0, 0.88], [0.12, 0, 0.88], [0.035, 0.02, 3.65]],
       [[-0.12, 0, 0.88], [0.035, 0.02, 3.65], [-0.035, 0.02, 2.62]],
@@ -1567,10 +1620,10 @@ gl_FragColor=vec4(color,inner*uOpacity);
     scene.add(manta);
     occlusionTargets.push(mantaBody, leftWingPivot.children[0], rightWingPivot.children[0], leftEye, rightEye);
 
-    const shadowMaterial = new THREE.MeshBasicMaterial({ color: moods.dawn.under, transparent: true, opacity: 0.18, depthWrite: false });
+    const shadowMaterial = new THREE.MeshBasicMaterial({ color: moods.dawn.under, transparent: true, opacity: 0.13, depthWrite: false });
     const mantaShadow = new THREE.Mesh(new THREE.CircleGeometry(1, 32), shadowMaterial);
     mantaShadow.rotation.x = -Math.PI / 2;
-    mantaShadow.scale.set(2.3, 1.15, 1);
+    mantaShadow.scale.set(1.85, 0.92, 1);
     mantaShadow.position.set(0, 0.2, 0.5);
     scene.add(mantaShadow);
 
@@ -2774,18 +2827,27 @@ gl_FragColor=vec4(color,inner*uOpacity);
     function updateOcean(delta) {
       const motion = reducedMotion ? 0.32 : 1;
       const positions = oceanGeometry.attributes.position.array;
-      const count = oceanBase.length / 3;
+      const count = oceanVertexCount;
       const damping = Math.exp(-8.4 * delta);
       const ambientGain = motion * (1 + motionEnergy * 0.72);
+      const swellSin0 = Math.sin(sceneTime * oceanSwellRate[0]);
+      const swellCos0 = Math.cos(sceneTime * oceanSwellRate[0]);
+      const swellSin1 = Math.sin(sceneTime * oceanSwellRate[1]);
+      const swellCos1 = Math.cos(sceneTime * oceanSwellRate[1]);
+      const swellSin2 = Math.sin(sceneTime * oceanSwellRate[2]);
+      const swellCos2 = Math.cos(sceneTime * oceanSwellRate[2]);
+      const swellSin3 = Math.sin(sceneTime * oceanSwellRate[3]);
+      const swellCos3 = Math.cos(sceneTime * oceanSwellRate[3]);
       for (let index = 0; index < count; index += 1) {
         const positionIndex = index * 3;
+        const tableIndex = index * oceanSwellTerms;
         const x = oceanBase[positionIndex];
         const z = oceanBase[positionIndex + 2];
         const ambient = (
-          Math.sin(x * 0.43 + sceneTime * 0.58) * 0.1 +
-          Math.cos(z * 0.36 - sceneTime * 0.41) * 0.09 +
-          Math.sin((x + z) * 0.72 + sceneTime * 0.83) * 0.032 +
-          Math.sin(x * 0.18 - z * 0.23 + sceneTime * 0.26) * 0.055
+          (oceanSwellSpace[tableIndex] * swellCos0 + oceanSwellCos[tableIndex] * swellSin0) * oceanSwellGain[0] +
+          (oceanSwellSpace[tableIndex + 1] * swellCos1 + oceanSwellCos[tableIndex + 1] * swellSin1) * oceanSwellGain[1] +
+          (oceanSwellSpace[tableIndex + 2] * swellCos2 + oceanSwellCos[tableIndex + 2] * swellSin2) * oceanSwellGain[2] +
+          (oceanSwellSpace[tableIndex + 3] * swellCos3 + oceanSwellCos[tableIndex + 3] * swellSin3) * oceanSwellGain[3]
         ) * ambientGain;
         const hinge = sampleCreaseField(x, z);
         const lateralScale = 0.16 + Math.abs(hinge) * 0.62;
@@ -2854,8 +2916,8 @@ gl_FragColor=vec4(color,inner*uOpacity);
       mantaShadow.position.x = manta.position.x;
       mantaShadow.position.z = manta.position.z;
       mantaShadow.position.y = 0.17 + (manta.position.y - oldY) * 0.04;
-      mantaShadow.scale.set(2.2 + Math.max(0, manta.position.y - 3.4) * 0.08, 1.1, 1);
-      shadowMaterial.opacity = clamp(0.2 - Math.max(0, manta.position.y - 3.6) * 0.016, 0.08, 0.2);
+      mantaShadow.scale.set(1.8 + Math.max(0, manta.position.y - 3.4) * 0.07, 0.9, 1);
+      shadowMaterial.opacity = clamp(0.15 - Math.max(0, manta.position.y - 3.6) * 0.012, 0.06, 0.15);
     }
 
     function updateLotus(delta) {
