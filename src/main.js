@@ -1,4 +1,5 @@
-import { createLandmarks, regionAt } from "./world/landmarks.js";
+import { createLandmarks } from "./world/landmarks.js";
+import { regionAt, islandSpecs, lotusSpecs, craneSpecs, foregroundSailSpecs } from "./world/layout.js";
 import { createHorizon } from "./world/horizon.js";
 import { createAtmosphere } from "./world/atmosphere.js";
 
@@ -648,14 +649,6 @@ const sailGeometry = geometryFromTriangles([
   [[0, 0, 0], [0.78, 1.1, 0.12], [-0.48, 1.28, -0.08]],
   [[0, 2.75, 0], [-0.48, 1.28, -0.08], [0.78, 1.1, 0.12]]
 ]);
-const islandSpecs = [
-  [-1.6, -6.0, 0.62, 2], [-6.6, -5.6, 0.5, 1], [0.6, -9.4, 0.55, 0],
-  [-13.0, 2.2, 0.6, 1], [-6.6, 7.4, 0.52, 0], [-11.8, 8.2, 0.44, 2],
-  [12.0, 0.8, 0.58, 2], [5.6, 6.8, 0.5, 0], [12.4, 6.0, 0.42, 1],
-  [0.0, 6.5, 0.62, 1], [-2.0, 0.0, 0.7, 0],
-  [2.5, 9.0, 0.66, 2], [-2.0, 11.0, 0.5, 1]
-];
-
 for (let index = 0; index < islandSpecs.length; index += 1) {
   const [x, z, scale, materialIndex] = islandSpecs[index];
   const group = new THREE.Group();
@@ -701,10 +694,6 @@ const foregroundSails = new THREE.InstancedMesh(sailGeometry, innerMaterial, 2);
 foregroundSails.instanceMatrix.setUsage(THREE.StaticDrawUsage);
 foregroundSails.frustumCulled = false;
 const foregroundTransform = new THREE.Object3D();
-const foregroundSailSpecs = [
-  [-7.4, 0, 10.4, 0.48, 1.9, -0.32],
-  [8.6, 0, 9.8, -0.42, 1.75, 0.28]
-];
 for (let index = 0; index < foregroundSailSpecs.length; index += 1) {
   const [x, y, z, rotation, scale, lean] = foregroundSailSpecs[index];
   foregroundTransform.position.set(x, y, z);
@@ -844,11 +833,6 @@ const mergedCraneGeometry = mergeCraneParts([
   { geometry: craneTailGeometry, matrix: tailMatrix }
 ]);
 const craneMaterial = createPaperMaterial("#f1dfb8", "#b9c8c3", { side: THREE.DoubleSide });
-const craneSpecs = [
-  [-1.6, 5.6, -6.4], [-6.4, 6.2, -7.0], [-4.6, 5.0, -11.2], [-7.6, 6.6, -10.4],
-  [-7.4, 5.0, 2.6], [-11.8, 5.4, 4.0], [-10.2, 4.6, 7.2], [-12.0, 5.8, 6.2],
-  [6.2, 4.8, 1.6], [10.8, 5.2, 2.2], [9.4, 4.4, 6.4], [11.8, 6.0, 5.6]
-];
 const craneCount = qualityTier === "light" ? 7 : craneSpecs.length;
 const craneInstances = new THREE.InstancedMesh(mergedCraneGeometry, craneMaterial, craneCount);
 craneInstances.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -891,11 +875,6 @@ const petalGeometry = geometryFromTriangles([
 const lotusBaseGeometry = new THREE.CircleGeometry(0.42, 10);
 lotusBaseGeometry.rotateX(-Math.PI / 2);
 const lotusHeartGeometry = new THREE.IcosahedronGeometry(0.2, 1);
-const lotusSpecs = [
-  [-8.14, 0.1, 4.93, 0.62], [-9.65, 0.08, 5.95, 0.3], [-11.1, 0.11, 4.83, 0.2],
-  [-10.47, 0.1, 3.11, 0.28], [-8.63, 0.1, 3.2, 0.16],
-  [2.0, 0.1, -5.0, 0.3], [-1.0, 0.1, 8.5, 0.12], [5.0, 0.11, 9.5, 0.14]
-];
 const lotusCount = qualityTier === "light" ? 4 : lotusSpecs.length;
 const petalCount = lotusCount * 15;
 const lotusPetalMaterial = createPaperMaterial("#f1dfb8", "#b9c8c3", { side: THREE.DoubleSide });

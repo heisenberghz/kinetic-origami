@@ -1,20 +1,26 @@
+import { regions } from "./layout.js";
+
 const TAU = Math.PI * 2;
 
-export const REGIONS = [
-  { id: "cathedral", name: "Folded Cathedral", x: -4, z: -8.6, radius: 5 },
-  { id: "lagoon", name: "Lotus Lagoon", x: -9.6, z: 4.4, radius: 4.4 },
-  { id: "shoals", name: "Windbreak Shoals", x: 8.6, z: 3.6, radius: 4.6 }
-];
+const plinthSize = 4;
+const spireBase = 2.7;
+const corniceLow = 3.1;
+const corniceHigh = 2.4;
+const finialSize = 0.85;
+const finialRise = 1.45;
+const finialBase = 3.9;
+const basinInnerRadius = 2.45;
+const basinOuterRadius = 3.2;
+const reedRingRadius = 3.05;
+const reedSize = 0.72;
+const shoalArcRadius = 2.9;
+const shoalSailWidth = 1.05;
 
-export function regionAt(x, z) {
-  for (let index = 0; index < REGIONS.length; index += 1) {
-    const region = REGIONS[index];
-    const offsetX = x - region.x;
-    const offsetZ = z - region.z;
-    if (offsetX * offsetX + offsetZ * offsetZ <= region.radius * region.radius) return region;
-  }
-  return null;
-}
+export const landmarkMetrics = {
+  cathedral: { planRadius: plinthSize * 0.5, height: finialBase + finialRise },
+  lagoon: { planRadius: reedRingRadius + reedSize * 0.5, basinInnerRadius, reedRingRadius },
+  shoals: { planRadius: shoalArcRadius + shoalSailWidth * 0.5 }
+};
 
 export function createLandmarks({ THREE, scene, qualityTier, materials, occluders }) {
   const group = new THREE.Group();
@@ -103,7 +109,7 @@ export function createLandmarks({ THREE, scene, qualityTier, materials, occluder
   }
 
   const cathedral = new THREE.Group();
-  cathedral.position.set(REGIONS[0].x, 0, REGIONS[0].z);
+  cathedral.position.set(regions[0].x, 0, regions[0].z);
   const cathedralSpin = new THREE.Group();
   cathedral.add(cathedralSpin);
 
@@ -117,21 +123,21 @@ export function createLandmarks({ THREE, scene, qualityTier, materials, occluder
     spireParts.push({ mesh, phase: spireParts.length * 0.85 });
   }
 
-  addSpirePart(4, 0.45, 0.3, 0, materials.cream);
-  addSpirePart(2.7, 3.6, 0.35, 0.35, materials.cream);
-  addSpirePart(3.1, 0.35, -0.25, 1.5, materials.indigo);
-  addSpirePart(2.4, 0.3, 0.2, 2.9, materials.indigo);
-  addSpirePart(0.85, 1.45, 0.15, 3.9, materials.vermilion);
-  anchors.push({ x: REGIONS[0].x, z: REGIONS[0].z, scale: 1.95 });
+  addSpirePart(plinthSize, 0.45, 0.3, 0, materials.cream);
+  addSpirePart(spireBase, 3.6, 0.35, 0.35, materials.cream);
+  addSpirePart(corniceLow, 0.35, -0.25, 1.5, materials.indigo);
+  addSpirePart(corniceHigh, 0.3, 0.2, 2.9, materials.indigo);
+  addSpirePart(finialSize, finialRise, 0.15, finialBase, materials.vermilion);
+  anchors.push({ x: regions[0].x, z: regions[0].z, scale: landmarkMetrics.cathedral.planRadius });
 
   const lagoon = new THREE.Group();
-  lagoon.position.set(REGIONS[1].x, 0, REGIONS[1].z);
-  const basin = new THREE.Mesh(scallopedBand(2.45, 3.2, qualityTier === "light" ? 20 : 30, 0.05, 0.05), materials.cream);
+  lagoon.position.set(regions[1].x, 0, regions[1].z);
+  const basin = new THREE.Mesh(scallopedBand(basinInnerRadius, basinOuterRadius, qualityTier === "light" ? 20 : 30, 0.05, 0.05), materials.cream);
   basin.position.y = 0.03;
   lagoon.add(basin);
 
   const reedCount = qualityTier === "light" ? 9 : 14;
-  const reeds = new THREE.InstancedMesh(foldedPlate(0.72, 0.92, 0.3), materials.vermilion, reedCount);
+  const reeds = new THREE.InstancedMesh(foldedPlate(reedSize, 0.92, 0.3), materials.vermilion, reedCount);
   reeds.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   reeds.frustumCulled = false;
   lagoon.add(reeds);
@@ -140,7 +146,7 @@ export function createLandmarks({ THREE, scene, qualityTier, materials, occluder
   for (let index = 0; index < reedCount; index += 1) {
     const u = index / reedCount;
     const angle = u * TAU + 0.24;
-    const radius = 3.05 + Math.sin(angle * 7 + 0.6) * 0.15;
+    const radius = reedRingRadius + Math.sin(angle * 7 + 0.6) * 0.15;
     reedSpecs.push({
       x: Math.cos(angle) * radius,
       z: Math.sin(angle) * radius,
@@ -149,16 +155,16 @@ export function createLandmarks({ THREE, scene, qualityTier, materials, occluder
       scale: 0.85 + Math.sin(index * 2.3) * 0.13
     });
   }
-  anchors.push({ x: REGIONS[1].x, z: REGIONS[1].z, scale: 1.5 });
+  anchors.push({ x: regions[1].x, z: regions[1].z, scale: landmarkMetrics.lagoon.planRadius * 0.45 });
 
   const shoals = new THREE.Group();
-  shoals.position.set(REGIONS[2].x, 0, REGIONS[2].z);
+  shoals.position.set(regions[2].x, 0, regions[2].z);
   const spillwayMesh = new THREE.Mesh(spillway(1.75, -66, 66, 16, 0.55, 0.16), materials.cream);
   spillwayMesh.position.y = 0.02;
   shoals.add(spillwayMesh);
 
   const shoalCount = qualityTier === "light" ? 5 : 8;
-  const shardGeometry = foldedSail(2.9, 1.05, 0.34);
+  const shardGeometry = foldedSail(2.9, shoalSailWidth, 0.34);
   const shards = new THREE.InstancedMesh(shardGeometry, materials.gold, shoalCount);
   shards.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   shards.frustumCulled = false;
@@ -169,7 +175,7 @@ export function createLandmarks({ THREE, scene, qualityTier, materials, occluder
   for (let index = 0; index < shoalCount; index += 1) {
     const u = shoalCount === 1 ? 0.5 : index / (shoalCount - 1);
     const angle = (-72 + 144 * u) * (Math.PI / 180);
-    const radius = 2.9 + Math.sin(u * 5.2) * 0.3;
+    const radius = shoalArcRadius + Math.sin(u * 5.2) * 0.3;
     shardSpecs.push({
       x: Math.cos(angle) * radius,
       z: Math.sin(angle) * radius,
@@ -181,7 +187,7 @@ export function createLandmarks({ THREE, scene, qualityTier, materials, occluder
     shards.setColorAt(index, shardTints[index % shardTints.length]);
   }
   shards.instanceColor.needsUpdate = true;
-  anchors.push({ x: REGIONS[2].x, z: REGIONS[2].z, scale: 1.55 });
+  anchors.push({ x: regions[2].x, z: regions[2].z, scale: landmarkMetrics.shoals.planRadius * 0.45 });
 
   group.add(cathedral, lagoon, shoals);
   scene.add(group);
@@ -218,5 +224,5 @@ export function createLandmarks({ THREE, scene, qualityTier, materials, occluder
 
   update(0, 1);
 
-  return { group, regions: REGIONS, regionAt, anchors, update };
+  return { group, anchors, update };
 }
