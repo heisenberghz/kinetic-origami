@@ -1,6 +1,7 @@
 import { createLandmarks } from "./world/landmarks.js";
 import { regionAt, islandSpecs, lotusSpecs, craneSpecs, foregroundSailSpecs } from "./world/layout.js";
 import { createHorizon } from "./world/horizon.js";
+import { createBackdrop } from "./world/backdrop.js";
 import { createAtmosphere } from "./world/atmosphere.js";
 
 const loadingScreen = document.querySelector("#loading");
@@ -444,7 +445,7 @@ function createOceanGeometry() {
     const radius = maximumRadius * Math.pow(ring / rings, 1.04);
     for (let segment = 0; segment < segments; segment += 1) {
       const angle = segment / segments * TAU;
-      const edgeScale = 1 + Math.sin(angle * 5 + 0.4) * 0.018 + Math.sin(angle * 11 - 0.7) * 0.009 + (outlineRandom() - 0.5) * 0.006;
+      const edgeScale = 1 + Math.sin(angle * 3 + 0.4) * 0.062 + Math.sin(angle * 7 - 0.7) * 0.034 + Math.sin(angle * 13 + 1.9) * 0.017 + (outlineRandom() - 0.5) * 0.014;
       positions.push(Math.cos(angle) * radius * edgeScale, 0, Math.sin(angle) * radius * edgeScale);
     }
   }
@@ -607,6 +608,7 @@ creaseLines.visible = false;
 scene.add(creaseLines);
 
 const horizon = createHorizon({ THREE, scene, moods });
+const backdrop = createBackdrop({ THREE, scene });
 
 const hemiLight = new THREE.HemisphereLight(moods.dawn.hemiSky, moods.dawn.hemiGround, 0.78);
 const keyLight = new THREE.DirectionalLight(moods.dawn.key, 4.0);
@@ -2097,6 +2099,7 @@ function updateMood(delta) {
   shadowMaterial.color.lerp(target.under, blend);
   contactShadowMaterial.color.lerp(target.under, blend);
   horizon.applyMood(activeMood, blend);
+  backdrop.applyMood(activeMood, blend);
   atmosphere.applyMood(activeMood, blend);
   creaseLineMaterial.uniforms.uColor.value.lerp(target.gold, blend);
   creaseLineMaterial.uniforms.uShadow.value.lerp(target.indigo, blend);
@@ -2148,6 +2151,7 @@ function animate() {
     updateIslands(sceneDelta);
     landmarks.update(sceneTime, reducedMotion ? 0.12 : 1 + motionEnergy * 0.3);
     horizon.update(sceneTime, orbit.currentTheta);
+    backdrop.update(sceneTime);
     atmosphere.update(sceneTime, { reducedMotion, motionEnergy, foldEnergy });
   }
   updateContactShadows();

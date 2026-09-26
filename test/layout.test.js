@@ -11,6 +11,7 @@ import {
   cameraLimits
 } from "../src/world/layout.js";
 import { landmarkMetrics } from "../src/world/landmarks.js";
+import { backdropRadii } from "../src/world/backdrop.js";
 
 const distance = (ax, az, bx, bz) => Math.hypot(ax - bx, az - bz);
 const region = (id) => regions.find((entry) => entry.id === id);
@@ -135,6 +136,21 @@ test("all content stays inside the ocean", () => {
   }
   for (const entry of regions) {
     assert.ok(reachOf(entry.x, entry.z, landmarkMetrics[entry.id].planRadius) < cameraLimits.oceanRadius, `${entry.id} escapes the ocean`);
+  }
+});
+
+test("backdrop ridges sit beyond the camera's furthest reach", () => {
+  for (const radius of backdropRadii) {
+    assert.ok(
+      radius > cameraLimits.maxZoomRadius,
+      `backdrop ridge at radius ${radius} is inside max zoom radius ${cameraLimits.maxZoomRadius}, so the camera can fly into it`
+    );
+  }
+});
+
+test("backdrop ridges stay outside the ocean so they break its silhouette", () => {
+  for (const radius of backdropRadii) {
+    assert.ok(radius > cameraLimits.oceanRadius, `backdrop ridge at ${radius} sits inside the ocean disc`);
   }
 });
 

@@ -12,15 +12,26 @@ The experience should feel like entering a place, not operating a website. The 3
 
 ## Current Baseline
 
-- Single-file Three.js experience in `index.html`.
+- ES module project, no build step. `index.html` holds markup and styles only.
+- Modules: `src/main.js` (scene, ocean, crest field, islands, manta, cranes, lotuses, input, UI), `src/world/horizon.js`, `src/world/atmosphere.js`, `src/world/landmarks.js`, `src/world/backdrop.js`, `src/world/layout.js`.
+- `src/world/layout.js` is the single source of truth for every world position: regions, islands, lotuses, cranes, sails, plan radii, and camera limits.
+- `test/layout.test.js` runs on `node --test` with zero dependencies and asserts that nothing overlaps, nothing spawns inside the default camera shell, backdrop ridges stay beyond max zoom, and every landmark keeps its satellites and cranes.
 - Procedural washi, vellum, indigo, vermilion, and gold-leaf visual language.
-- Faceted low-poly paper ocean with persistent crease interaction.
+- Faceted low-poly paper ocean with persistent crease interaction and an organically wobbled rim.
+- Three landmark regions built: Folded Cathedral, Lotus Lagoon, Windbreak Shoals.
+- Distant backdrop ridge rings beyond the ocean edge, unlit and colour pre-blended toward the sky so they recede without relying on scene fog.
 - Manta ray, crane flock, lotus blossoms, paper particles, ribbons, and island forms.
 - Damped orbit, zoom, pointer/touch input, keyboard exploration, mood switching, pause, and reduced-motion handling.
-- Field menu replaces the persistent website-style control layer.
+- Field menu replaces the persistent website-style control layer; the plate line reads the current region.
 - Verified manually at approximately 60 FPS on the user's integrated graphics hardware.
 - No audio layer is currently included; audio is a later isolated phase.
 - No headless browser or automated runtime testing is permitted for this project.
+
+## Phase Status
+
+- **Phase 1 World Map:** done. Regions, positions, silhouettes, and camera-facing compositions are defined and covered by tests.
+- **Phase 2 World Layers:** in progress. Foreground sails and near-field islets exist, the ocean rim is organic, and backdrop ridges are in. Ridge recession and fog tuning still need wide-vista review in both moods.
+- **Phase 3 to Phase 6:** not started.
 
 ## Priority 0: Acceptance Gate
 

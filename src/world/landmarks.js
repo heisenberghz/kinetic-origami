@@ -124,10 +124,10 @@ export function createLandmarks({ THREE, scene, qualityTier, materials, occluder
   }
 
   addSpirePart(plinthSize, 0.45, 0.3, 0, materials.cream);
-  addSpirePart(spireBase, 3.6, 0.35, 0.35, materials.cream);
-  addSpirePart(corniceLow, 0.35, -0.25, 1.5, materials.indigo);
-  addSpirePart(corniceHigh, 0.3, 0.2, 2.9, materials.indigo);
-  addSpirePart(finialSize, finialRise, 0.15, finialBase, materials.vermilion);
+  addSpirePart(spireBase, 3.6, 0.35, 0.35, materials.indigo);
+  addSpirePart(corniceLow, 0.35, -0.25, 1.5, materials.vermilion);
+  addSpirePart(corniceHigh, 0.3, 0.2, 2.9, materials.cream);
+  addSpirePart(finialSize, finialRise, 0.15, finialBase, materials.gold);
   anchors.push({ x: regions[0].x, z: regions[0].z, scale: landmarkMetrics.cathedral.planRadius });
 
   const lagoon = new THREE.Group();
