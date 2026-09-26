@@ -1,3 +1,5 @@
+import { createLandmarks, regionAt } from "./world/landmarks.js";
+
 const loadingScreen = document.querySelector("#loading");
 const fallback = document.querySelector("#fallback");
 const fallbackMessage = document.querySelector("#fallbackMessage");
@@ -66,6 +68,7 @@ try {
 const TAU = Math.PI * 2;
 const stage = document.querySelector("#stage");
 const liveStatus = document.querySelector("#liveStatus");
+const plateTitle = document.querySelector("#plateTitle");
 const cursorSeal = document.querySelector("#cursorSeal");
 const motionButton = document.querySelector("#motionButton");
 const motionLabel = document.querySelector("#motionLabel");
@@ -732,16 +735,10 @@ const sailGeometry = geometryFromTriangles([
   [[0, 2.75, 0], [-0.48, 1.28, -0.08], [0.78, 1.1, 0.12]]
 ]);
 const islandSpecs = [
-  [-3.4, -2.6, 1.28, 2],
-  [4.8, -3.4, 1.02, 1],
-  [-7.6, 2.6, 0.82, 1],
-  [7.0, 3.8, 0.7, 0],
-  [2.4, 8.4, 0.56, 2],
-  [-2.8, 9.0, 0.5, 0],
-  [11.0, 0.4, 0.42, 0],
-  [-11.0, 0.8, 0.4, 1],
-  [9.4, 8.4, 1.08, 2],
-  [-9.6, 8.8, 0.94, 1]
+  [-1.6, -6.0, 0.62, 2], [-6.6, -5.6, 0.5, 1], [0.6, -9.4, 0.55, 0],
+  [-13.0, 2.2, 0.6, 1], [-6.6, 7.4, 0.52, 0], [-11.8, 8.2, 0.44, 2],
+  [12.0, 0.8, 0.58, 2], [5.6, 6.8, 0.5, 0], [12.4, 6.0, 0.42, 1],
+  [0.0, 6.5, 0.62, 1], [-2.0, 0.0, 0.7, 0]
 ];
 
 for (let index = 0; index < islandSpecs.length; index += 1) {
@@ -771,6 +768,19 @@ for (let index = 0; index < islandSpecs.length; index += 1) {
   scene.add(group);
   islands.push({ group, baseY: group.position.y, phase: index * 0.83, rotation: group.rotation.y, shadowScale: scale });
 }
+
+const landmarks = createLandmarks({
+  THREE,
+  scene,
+  qualityTier,
+  occluders: occlusionTargets,
+  materials: {
+    cream: creamMaterial,
+    vermilion: vermilionMaterial,
+    indigo: indigoMaterial,
+    gold: goldMaterial
+  }
+});
 
 const foregroundSails = new THREE.InstancedMesh(sailGeometry, indigoMaterial, 2);
 foregroundSails.instanceMatrix.setUsage(THREE.StaticDrawUsage);
@@ -920,9 +930,9 @@ const mergedCraneGeometry = mergeCraneParts([
 ]);
 const craneMaterial = createPaperMaterial("#f1dfb8", "#b9c8c3", { side: THREE.DoubleSide });
 const craneSpecs = [
-  [-5.2, 5.0, -1.8], [4.6, 5.8, -3.4], [7.2, 4.7, 1.4], [-8.0, 4.6, 2.0],
-  [2.6, 7.0, -8.0], [-3.4, 5.8, -9.0], [10.4, 6.3, -5.6], [-10.6, 6.0, -6.0],
-  [6.4, 4.8, 7.2], [-6.8, 5.1, 7.8], [12.0, 7.4, 3.0], [-12.2, 7.1, 4.0]
+  [-1.6, 5.6, -6.4], [-6.4, 6.2, -7.0], [-4.6, 5.0, -11.2], [-7.6, 6.6, -10.4],
+  [-7.4, 5.0, 2.6], [-11.8, 5.4, 4.0], [-10.2, 4.6, 7.2], [-12.0, 5.8, 6.2],
+  [6.2, 4.8, 1.6], [10.8, 5.2, 2.2], [9.4, 4.4, 6.4], [11.8, 6.0, 5.6]
 ];
 const craneCount = qualityTier === "light" ? 7 : craneSpecs.length;
 const craneInstances = new THREE.InstancedMesh(mergedCraneGeometry, craneMaterial, craneCount);
@@ -967,8 +977,9 @@ const lotusBaseGeometry = new THREE.CircleGeometry(0.42, 10);
 lotusBaseGeometry.rotateX(-Math.PI / 2);
 const lotusHeartGeometry = new THREE.IcosahedronGeometry(0.2, 1);
 const lotusSpecs = [
-  [-4.5, 0.1, 3.2, 0.62], [3.2, 0.08, 1.0, 0.3], [-7.2, 0.11, -1.8, 0.2], [6.4, 0.1, -2.2, 0.28],
-  [1.5, 0.1, 9.4, 0.16], [-2.0, 0.1, -9.6, 0.12], [12.0, 0.1, 3.0, 0.16], [-12.0, 0.1, 3.4, 0.12]
+  [-8.14, 0.1, 4.93, 0.62], [-9.65, 0.08, 5.95, 0.3], [-11.1, 0.11, 4.83, 0.2],
+  [-10.47, 0.1, 3.11, 0.28], [-8.63, 0.1, 3.2, 0.16],
+  [2.0, 0.1, -5.0, 0.3], [-1.0, 0.1, 8.5, 0.12], [5.0, 0.11, 9.5, 0.14]
 ];
 const lotusCount = qualityTier === "light" ? 4 : lotusSpecs.length;
 const petalCount = lotusCount * 15;
@@ -1043,7 +1054,7 @@ const contactShadowGeometry = new THREE.CircleGeometry(1, 20);
 contactShadowGeometry.rotateX(-Math.PI / 2);
 const contactShadowMaterial = new THREE.MeshBasicMaterial({ color: moods.dawn.under, transparent: true, opacity: 0.08, depthWrite: false, side: THREE.DoubleSide, toneMapped: false });
 contactShadowMaterial.forceSinglePass = true;
-const contactShadowCount = islands.length + lotusFlowers.length;
+const contactShadowCount = islands.length + lotusFlowers.length + landmarks.anchors.length;
 const contactShadowInstances = new THREE.InstancedMesh(contactShadowGeometry, contactShadowMaterial, contactShadowCount);
 contactShadowInstances.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
 contactShadowInstances.frustumCulled = false;
@@ -1053,6 +1064,7 @@ const contactShadowTransform = new THREE.Object3D();
 const contactShadowStates = [];
 for (const island of islands) contactShadowStates.push({ kind: "island", source: island, scale: island.shadowScale });
 for (const lotus of lotusFlowers) contactShadowStates.push({ kind: "lotus", source: lotus, scale: lotus.bloomScale });
+for (const anchor of landmarks.anchors) contactShadowStates.push({ kind: "anchor", source: anchor, scale: anchor.scale });
 
 function updateContactShadows() {
   for (let index = 0; index < contactShadowStates.length; index += 1) {
@@ -1062,6 +1074,11 @@ function updateContactShadows() {
       contactShadowTransform.position.set(island.group.position.x, 0.025, island.group.position.z);
       contactShadowTransform.rotation.set(0, island.group.rotation.y, 0);
       contactShadowTransform.scale.set(0.95 * shadow.scale, 1, 0.5 * shadow.scale);
+    } else if (shadow.kind === "anchor") {
+      const anchor = shadow.source;
+      contactShadowTransform.position.set(anchor.x, 0.022, anchor.z);
+      contactShadowTransform.rotation.set(0, 0, 0);
+      contactShadowTransform.scale.set(0.95 * shadow.scale, 1, 0.62 * shadow.scale);
     } else {
       const lotus = shadow.source;
       const unfurl = lotus.bloom;
@@ -1196,6 +1213,16 @@ function markDirectMotion(duration = 900) {
 function announce(message) {
   liveStatus.textContent = "";
   window.setTimeout(() => { liveStatus.textContent = message; }, 20);
+}
+
+let activeRegion = null;
+
+function updateRegionReadout() {
+  const region = regionAt(cameraTarget.x, cameraTarget.z);
+  if (region === activeRegion) return;
+  activeRegion = region;
+  if (plateTitle) plateTitle.textContent = region ? `${region.name} · at anchor` : "Manta 01 · in passage";
+  announce(region ? `${region.name}.` : "Open water.");
 }
 
 function projectKeyboardCursor(lotus) {
@@ -1855,6 +1882,7 @@ function updateCamera(delta) {
     if (movement > 0.014) scatterCranes(clamp(cameraSpeed * 0.1, 0.35, 0.7));
     previousCameraPosition.copy(camera.position);
   }
+  updateRegionReadout();
 }
 
 function stampCreaseSegment(start, end, factor) {
@@ -2356,6 +2384,7 @@ function animate() {
   updateCranes(sceneDelta);
   if (!paused) {
     updateIslands(sceneDelta);
+    landmarks.update(sceneTime, reducedMotion ? 0.12 : 1 + motionEnergy * 0.3);
     updateHorizonLayers();
     updateParticles();
     updateRibbons();
