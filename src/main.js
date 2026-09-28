@@ -2,6 +2,7 @@ import { createLandmarks } from "./world/landmarks.js";
 import { regionAt, islandSpecs, lotusSpecs, craneSpecs, foregroundSailSpecs } from "./world/layout.js";
 import { createHorizon } from "./world/horizon.js";
 import { createBackdrop } from "./world/backdrop.js";
+import { readHarnessParams, posePresets, createStatsPanel } from "./world/harness.js";
 import { createAtmosphere } from "./world/atmosphere.js";
 
 const loadingScreen = document.querySelector("#loading");
@@ -1591,6 +1592,7 @@ function resize() {
     orbit.phiVelocity = 0;
     orbit.radiusVelocity = 0;
     markDirectMotion(1200);
+    applyHarnessPose();
   }
   quality.maxDpr = Math.min(width < 760 ? 1.25 : 1.4, viewportDprLimit(width, height));
   const deviceDprLimit = Math.min(quality.maxDpr, window.devicePixelRatio || 1);
@@ -1873,6 +1875,7 @@ function resetScene() {
   cameraTarget.z = 0;
   cameraSpeed = 0;
   cameraInitialized = false;
+  applyHarnessPose();
   keyboardLotusIndex = -1;
   hoveredLotus = null;
   keyboardCursorLotus = null;
@@ -2163,6 +2166,11 @@ function animate() {
   }
 
   renderer.render(scene, camera);
+  if (statsPanel) {
+    statsPanel.sample(renderer.info, quality.dpr);
+    statsPanel.setCamera(orbit.currentPhi, orbit.currentRadius, orbit.currentTheta);
+    statsPanel.update(frameMilliseconds);
+  }
   renderDirty = moodTransitioning || (paused && directActive);
   if (!revealed) {
     revealed = true;
@@ -2171,6 +2179,32 @@ function animate() {
   }
 }
 
+const harness = readHarnessParams(window.location.search);
+const statsPanel = harness.stats ? createStatsPanel(document) : null;
+
+function applyHarnessPose() {
+  if (harness.pose) {
+    const preset = posePresets[harness.pose];
+    panTarget.set(preset.x, preset.z);
+    panCurrent.set(preset.x, preset.z);
+    cameraTarget.x = preset.x;
+    cameraTarget.z = preset.z;
+    orbit.targetRadius = orbit.currentRadius = clamp(preset.radius, 8.2, maxOrbitRadius);
+  }
+  if (harness.theta !== null) orbit.targetTheta = orbit.currentTheta = harness.theta;
+  if (harness.phi !== null) orbit.targetPhi = orbit.currentPhi = clamp(harness.phi, 0.48, 1.39);
+  if (harness.radius !== null) orbit.targetRadius = orbit.currentRadius = clamp(harness.radius, 8.2, maxOrbitRadius);
+  if (harness.mood) setMood(harness.mood, false);
+  if (statsPanel) {
+    const parts = [];
+    if (harness.pose) parts.push(`pose:${harness.pose}`);
+    if (harness.mood) parts.push(harness.mood);
+    statsPanel.setHeader(parts.length ? parts.join("  ") : "default pose");
+  }
+  renderDirty = true;
+}
+
+applyHarnessPose();
 scheduleWorldSettle();
 setPaused(paused, false);
 lastFrameTime = performance.now();

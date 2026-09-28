@@ -10,6 +10,30 @@ This document defines the next evolution of the interactive paper world. The pri
 
 The experience should feel like entering a place, not operating a website. The 3D world is the primary interface. Editorial UI is quiet, optional, and always yields to the scene.
 
+## Dev Harness
+
+Runtime checks stay manual, but camera framing must be reproducible so screenshots are comparable across commits. `src/world/harness.js` adds URL parameters for this. They are read once at boot, and ignored entirely when absent.
+
+| Parameter | Effect |
+| --- | --- |
+| `?pose=cathedral\|lagoon\|shoals\|open` | Jumps the camera target to a landmark centre at a fixed radius. Sets both pan target and current value, so there is no settle-in animation. |
+| `?mood=dawn\|midnight` | Boots directly into a mood without the field menu. |
+| `?orbit=245` | Sets orbit theta in degrees. |
+| `?phi=70` | Sets camera elevation in degrees, clamped to the playable range. |
+| `?zoom=12` | Sets orbit radius, clamped to the playable range. |
+| `?stats=1` | Shows a fixed panel with fps, average frame time, draw submissions, triangles, device pixel ratio, and live camera values. |
+
+Any malformed or unknown value is ignored rather than throwing, so a bad URL still boots. Overrides are re-applied on resize and on scene reset, so `R` returns to the framed pose rather than the default one.
+
+Typical acceptance sweep:
+
+```
+?pose=cathedral&stats=1
+?pose=lagoon&stats=1
+?pose=shoals&stats=1
+?pose=open&mood=midnight&stats=1
+```
+
 ## Current Baseline
 
 - ES module project, no build step. `index.html` holds markup and styles only.
