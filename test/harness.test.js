@@ -1,7 +1,7 @@
-﻿import test from "node:test";
+import test from "node:test";
 import assert from "node:assert/strict";
 import { regions, cameraLimits } from "../src/world/layout.js";
-import { readHarnessParams, posePresets } from "../src/world/harness.js";
+import { readHarnessParams, posePresets, createStatsPanel } from "../src/world/harness.js";
 
 test("harness ignores unknown or malformed params instead of breaking the boot", () => {
   const empty = readHarnessParams("");
@@ -35,6 +35,29 @@ test("stats flag is only set when present", () => {
   assert.equal(readHarnessParams("?stats").stats, true);
   assert.equal(readHarnessParams("?stats=0").stats, true);
   assert.equal(readHarnessParams("?stats=1").stats, true);
+});
+
+test("the stats panel accepts a plain string header and renders without a DOM crash", () => {
+  const stubElement = {
+    textContent: "",
+    setAttribute() {},
+    style: {}
+  };
+  const appended = [];
+  const stubDocument = {
+    createElement: () => stubElement,
+    body: { appendChild: (node) => appended.push(node) }
+  };
+  const panel = createStatsPanel(stubDocument);
+  assert.equal(appended.length, 1, "the panel should be appended to the document body");
+  panel.setHeader("pose:open  dawn");
+  panel.setCamera(1.15, 18.5, 0.64);
+  panel.sample({ render: { calls: 47, triangles: 6120 } }, 1.25);
+  panel.update(300);
+  assert.match(stubElement.textContent, /pose:open {2}dawn/);
+  assert.match(stubElement.textContent, /draws {2}47/);
+  assert.match(stubElement.textContent, /tris {3}6120/);
+  assert.match(stubElement.textContent, /fps/);
 });
 
 test("every harness pose matches its landmark centre and stays inside the camera shell", () => {

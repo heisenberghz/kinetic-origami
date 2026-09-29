@@ -49,8 +49,31 @@ export const cameraLimits = {
   smallestDefaultRadius: 18.5,
   minZoomRadius: 8.2,
   maxZoomRadius: 25.5,
-  oceanRadius: 23.5
+  oceanRadius: 23.5,
+  landmarkClearance: 0.6,
+  minPhi: 0.48,
+  maxPhi: 1.39,
+  targetY: 0.52
 };
+
+export function pushOutOfLandmarks(x, z, cameraY, metrics, out) {
+  out.x = x;
+  out.z = z;
+  for (let index = 0; index < regions.length; index += 1) {
+    const region = regions[index];
+    const metric = metrics[region.id];
+    if (cameraY >= metric.height) continue;
+    const limit = metric.planRadius + cameraLimits.landmarkClearance;
+    const offsetX = out.x - region.x;
+    const offsetZ = out.z - region.z;
+    const distanceSquared = offsetX * offsetX + offsetZ * offsetZ;
+    if (distanceSquared >= limit * limit || distanceSquared < 1e-6) continue;
+    const distance = Math.sqrt(distanceSquared);
+    out.x = region.x + (offsetX / distance) * limit;
+    out.z = region.z + (offsetZ / distance) * limit;
+  }
+  return out;
+}
 
 export const islandCount = islandSpecs.length;
 export const lotusCount = lotusSpecs.length;

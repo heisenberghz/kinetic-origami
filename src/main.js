@@ -1,5 +1,5 @@
-import { createLandmarks } from "./world/landmarks.js";
-import { regionAt, islandSpecs, lotusSpecs, craneSpecs, foregroundSailSpecs } from "./world/layout.js";
+import { createLandmarks, landmarkMetrics } from "./world/landmarks.js";
+import { regionAt, islandSpecs, lotusSpecs, craneSpecs, foregroundSailSpecs, pushOutOfLandmarks } from "./world/layout.js";
 import { createHorizon } from "./world/horizon.js";
 import { createBackdrop } from "./world/backdrop.js";
 import { readHarnessParams, posePresets, createStatsPanel } from "./world/harness.js";
@@ -46,12 +46,14 @@ const importWithTimeout = (url, timeout = 4500) => new Promise((resolve, reject)
 window.addEventListener("error", (event) => {
   if (startupComplete) return;
   event.preventDefault();
-  showFailure("The paper world could not finish initializing. Reload this page to try again.");
+  console.error("[archipelago startup error]", event.error || event.message, event.filename, event.lineno);
+  showFailure(`The paper world could not finish initializing: ${(event.error && event.error.message) || event.message || "unknown error"}`);
 });
 window.addEventListener("unhandledrejection", (event) => {
   if (startupComplete) return;
   event.preventDefault();
-  showFailure("The paper world could not finish initializing. Reload this page to try again.");
+  console.error("[archipelago startup rejection]", event.reason);
+  showFailure(`The paper world could not finish initializing: ${(event.reason && event.reason.message) || String(event.reason)}`);
 });
 
 try {
@@ -148,6 +150,7 @@ const pointerPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 const pointerWorld = new THREE.Vector3();
 const keyboardCursorPoint = new THREE.Vector3();
 const raycaster = new THREE.Raycaster();
+const cameraPush = { x: 0, z: 0 };
 const maxOrbitRadius = 25.5;
 let viewProfile = initialViewProfile;
 let defaultPhi = initialViewProfile.phi;
@@ -1687,6 +1690,9 @@ function updateCamera(delta) {
     cameraTarget.y + Math.cos(orbit.currentPhi) * orbit.currentRadius,
     cameraTarget.z + Math.cos(orbit.currentTheta) * sinPhi * orbit.currentRadius
   );
+  pushOutOfLandmarks(camera.position.x, camera.position.z, camera.position.y, landmarkMetrics, cameraPush);
+  camera.position.x = cameraPush.x;
+  camera.position.z = cameraPush.z;
   camera.lookAt(cameraTarget);
 
   if (!cameraInitialized) {

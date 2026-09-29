@@ -15,11 +15,17 @@ const reedRingRadius = 3.05;
 const reedSize = 0.72;
 const shoalArcRadius = 2.9;
 const shoalSailWidth = 1.05;
+const shoalSailHeight = 2.9;
+const reedRise = 0.92;
+const shoalScaleSpread = 0.4;
+const shoalScaleBase = 0.92;
+const reedScaleSpread = 0.13;
+const reedScaleBase = 0.85;
 
 export const landmarkMetrics = {
   cathedral: { planRadius: plinthSize * 0.5, height: finialBase + finialRise },
-  lagoon: { planRadius: reedRingRadius + reedSize * 0.5, basinInnerRadius, reedRingRadius },
-  shoals: { planRadius: shoalArcRadius + shoalSailWidth * 0.5 }
+  lagoon: { planRadius: reedRingRadius + reedSize * 0.5, height: reedRise * (reedScaleBase + reedScaleSpread), basinInnerRadius, reedRingRadius },
+  shoals: { planRadius: shoalArcRadius + shoalSailWidth * 0.5, height: shoalSailHeight * (shoalScaleBase + shoalScaleSpread) }
 };
 
 export function createLandmarks({ THREE, scene, qualityTier, materials, occluders }) {
@@ -137,7 +143,7 @@ export function createLandmarks({ THREE, scene, qualityTier, materials, occluder
   lagoon.add(basin);
 
   const reedCount = qualityTier === "light" ? 9 : 14;
-  const reeds = new THREE.InstancedMesh(foldedPlate(reedSize, 0.92, 0.3), materials.vermilion, reedCount);
+  const reeds = new THREE.InstancedMesh(foldedPlate(reedSize, reedRise, 0.3), materials.vermilion, reedCount);
   reeds.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   reeds.frustumCulled = false;
   lagoon.add(reeds);
@@ -152,7 +158,7 @@ export function createLandmarks({ THREE, scene, qualityTier, materials, occluder
       z: Math.sin(angle) * radius,
       angle,
       phase: u * TAU,
-      scale: 0.85 + Math.sin(index * 2.3) * 0.13
+      scale: reedScaleBase + Math.sin(index * 2.3) * reedScaleSpread
     });
   }
   anchors.push({ x: regions[1].x, z: regions[1].z, scale: landmarkMetrics.lagoon.planRadius * 0.45 });
@@ -164,7 +170,7 @@ export function createLandmarks({ THREE, scene, qualityTier, materials, occluder
   shoals.add(spillwayMesh);
 
   const shoalCount = qualityTier === "light" ? 5 : 8;
-  const shardGeometry = foldedSail(2.9, shoalSailWidth, 0.34);
+  const shardGeometry = foldedSail(shoalSailHeight, shoalSailWidth, 0.34);
   const shards = new THREE.InstancedMesh(shardGeometry, materials.gold, shoalCount);
   shards.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   shards.frustumCulled = false;
@@ -181,7 +187,7 @@ export function createLandmarks({ THREE, scene, qualityTier, materials, occluder
       z: Math.sin(angle) * radius,
       yaw: angle,
       lean: 0.1 + u * 0.15,
-      scale: 0.92 + Math.sin(u * 3.1 + 0.6) * 0.4,
+      scale: shoalScaleBase + Math.sin(u * 3.1 + 0.6) * shoalScaleSpread,
       phase: u * 4.2
     });
     shards.setColorAt(index, shardTints[index % shardTints.length]);

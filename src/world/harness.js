@@ -70,7 +70,7 @@ export function createStatsPanel(document) {
   let phi = 0;
 
   return {
-    setHeader(lines) { header = lines.join("  "); },
+    setHeader(text) { header = text; },
     setCamera(currentPhi, currentRadius, currentTheta) {
       phi = currentPhi;
       radius = currentRadius;

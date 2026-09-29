@@ -59,21 +59,28 @@ Typical acceptance sweep:
 
 ## Priority 0: Acceptance Gate
 
-Before adding more content, manually verify the current build at three camera distances and in both moods:
+Measured baseline, dawn, wide vista at the default pose, on the user's integrated AMD APU:
 
-1. Macro view: crease ridges, lotus petals, manta silhouette, and paper facets.
-2. Working view: the hero archipelago cluster and its negative space.
-3. Wide vista: horizon recession, depth layers, and the absence of a floating disk edge.
+| Metric | Measured | Contract | Result |
+| --- | --- | --- | --- |
+| Frame rate | 60.0 fps | 60 fps | pass |
+| Frame time | 16.67 ms | under budget | pass, vsync locked |
+| Draw submissions | 66 | preferably under 50 | fail, over by 16 |
+| Triangles | 7,793 | well under 60,000 | pass |
+| Device pixel ratio | 1.25 | adaptive, low power | pass |
 
-Record:
+Draw submission breakdown, largest first:
 
-- FPS and frame-time average.
-- Draw submissions and triangle count if the temporary performance probe is used.
-- Touch fold, orbit, pan, and zoom behavior.
-- Field menu focus and keyboard operation.
-- Any visual moment that still reads as a flat diorama.
+- 30 — islands, as 13 separate base, shard and sail meshes
+- 8 — manta body, two wings, two accents, two eyes, tail
+- 5 — cathedral spire parts
+- 4 — far water disc and three horizon layers
+- 3 each — sun, ribbons, backdrop ridge rings, lotus instances
+- 2 each — lagoon basin and reeds, shoal spillway and sails
 
-A change is not accepted because it looks good in one mood or one camera position.
+The obvious win is instancing the islands, which share three geometries and differ only in transform and tint. That would replace roughly 30 submissions with 3 and bring the total near 40. The roadmap already asks that draw submissions must not grow with the number of landmarks, and right now they do.
+
+Still to verify by hand: macro and working views, the midnight mood, and touch behaviour.
 
 ---
 
