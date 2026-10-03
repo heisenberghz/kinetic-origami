@@ -1,9 +1,10 @@
 import { createLandmarks, landmarkMetrics } from "./world/landmarks.js";
-import { regionAt, islandSpecs, lotusSpecs, craneSpecs, foregroundSailSpecs, pushOutOfLandmarks } from "./world/layout.js";
+import { regionAt, lotusSpecs, craneSpecs, foregroundSailSpecs, pushOutOfLandmarks } from "./world/layout.js";
 import { createHorizon } from "./world/horizon.js";
 import { createBackdrop } from "./world/backdrop.js";
 import { readHarnessParams, posePresets, createStatsPanel } from "./world/harness.js";
 import { createAtmosphere } from "./world/atmosphere.js";
+import { createIslands } from "./world/islands.js";
 
 const loadingScreen = document.querySelector("#loading");
 const fallback = document.querySelector("#fallback");
@@ -256,7 +257,6 @@ skyDome.renderOrder = -10;
 skyDome.frustumCulled = false;
 scene.add(skyDome);
 const materialStates = [];
-const islands = [];
 const cranes = [];
 const lotusFlowers = [];
 const lotusPetalOwners = [];
@@ -644,41 +644,24 @@ sunRoot.add(sunHalo, sunDisc, sunRing);
 sunRoot.position.set(-10.5, 8.2, -16.5);
 scene.add(sunRoot);
 
-const rockGeometry = new THREE.IcosahedronGeometry(0.72, 0);
-const shardGeometry = new THREE.ConeGeometry(0.64, 2.15, 4, 1, false);
-shardGeometry.translate(0, 1.075, 0);
 const sailGeometry = geometryFromTriangles([
   [[0, 0, 0], [0, 2.75, 0], [0.78, 1.1, 0.12]],
   [[0, 0, 0], [0.78, 1.1, 0.12], [-0.48, 1.28, -0.08]],
   [[0, 2.75, 0], [-0.48, 1.28, -0.08], [0.78, 1.1, 0.12]]
 ]);
-for (let index = 0; index < islandSpecs.length; index += 1) {
-  const [x, z, scale, materialIndex] = islandSpecs[index];
-  const group = new THREE.Group();
-  const base = new THREE.Mesh(rockGeometry, rockMaterials[materialIndex]);
-  base.scale.set(1.45 * scale, 0.5 * scale, 1.05 * scale);
-  base.position.y = 0.12 * scale;
-  base.rotation.set(0.1 * index, index * 0.81, 0.06 * index);
-  const shard = new THREE.Mesh(shardGeometry, materialIndex === 1 ? vermilionMaterial : index % 2 ? goldMaterial : indigoMaterial);
-  shard.position.set(0.28 * scale, 0.18 * scale, -0.08 * scale);
-  shard.scale.set(0.72 * scale, scale, 0.72 * scale);
-  shard.rotation.y = 0.6 + index * 0.47;
-  group.add(base, shard);
-  occlusionTargets.push(base, shard);
-
-  if (index % 2 === 0) {
-    const sail = new THREE.Mesh(sailGeometry, index % 4 === 0 ? creamMaterial : vermilionMaterial);
-    sail.position.set(-0.25 * scale, 0.2 * scale, 0.18 * scale);
-    sail.scale.setScalar(scale * 0.72);
-    sail.rotation.y = -0.5 + index * 0.23;
-    group.add(sail);
-    occlusionTargets.push(sail);
-  }
-
-  group.position.set(x, -0.04, z);
-  scene.add(group);
-  islands.push({ group, baseY: group.position.y, phase: index * 0.83, rotation: group.rotation.y, shadowScale: scale });
-}
+const islandWorld = createIslands({
+  THREE,
+  scene,
+  materials: {
+    rock: rockMaterials,
+    vermilion: vermilionMaterial,
+    gold: goldMaterial,
+    indigo: indigoMaterial,
+    cream: creamMaterial
+  },
+  occluders: occlusionTargets
+});
+const islands = islandWorld.islands;
 
 const landmarks = createLandmarks({
   THREE,
@@ -959,7 +942,7 @@ contactShadowInstances.renderOrder = 1;
 scene.add(contactShadowInstances);
 const contactShadowTransform = new THREE.Object3D();
 const contactShadowStates = [];
-for (const island of islands) contactShadowStates.push({ kind: "island", source: island, scale: island.shadowScale });
+for (const island of islands) contactShadowStates.push({ kind: "island", source: island, scale: island.scale });
 for (const lotus of lotusFlowers) contactShadowStates.push({ kind: "lotus", source: lotus, scale: lotus.bloomScale });
 for (const anchor of landmarks.anchors) contactShadowStates.push({ kind: "anchor", source: anchor, scale: anchor.scale });
 
@@ -968,8 +951,8 @@ function updateContactShadows() {
     const shadow = contactShadowStates[index];
     if (shadow.kind === "island") {
       const island = shadow.source;
-      contactShadowTransform.position.set(island.group.position.x, 0.025, island.group.position.z);
-      contactShadowTransform.rotation.set(0, island.group.rotation.y, 0);
+      contactShadowTransform.position.set(island.x, 0.025, island.z);
+      contactShadowTransform.rotation.set(0, island.yaw, 0);
       contactShadowTransform.scale.set(0.95 * shadow.scale, 1, 0.5 * shadow.scale);
     } else if (shadow.kind === "anchor") {
       const anchor = shadow.source;
@@ -2078,15 +2061,6 @@ function updateCranes(delta) {
   craneInstances.instanceMatrix.needsUpdate = true;
 }
 
-function updateIslands(delta) {
-  const motion = reducedMotion ? 0.1 : 1 + motionEnergy * 0.35;
-  for (let index = 0; index < islands.length; index += 1) {
-    const island = islands[index];
-    island.group.position.y = island.baseY + Math.sin(sceneTime * 0.45 + island.phase) * 0.025 * motion;
-    island.group.rotation.y = island.rotation + Math.sin(sceneTime * 0.18 + island.phase) * 0.025 * motion;
-  }
-}
-
 function updateMood(delta) {
   const target = moods[activeMood];
   const blend = 1 - Math.exp(-3.1 * delta);
@@ -2157,7 +2131,7 @@ function animate() {
   updateLotus(sceneDelta);
   updateCranes(sceneDelta);
   if (!paused) {
-    updateIslands(sceneDelta);
+    islandWorld.update(sceneTime, reducedMotion ? 0.1 : 1 + motionEnergy * 0.35);
     landmarks.update(sceneTime, reducedMotion ? 0.12 : 1 + motionEnergy * 0.3);
     horizon.update(sceneTime, orbit.currentTheta);
     backdrop.update(sceneTime);

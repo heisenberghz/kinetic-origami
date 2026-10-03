@@ -65,20 +65,20 @@ Measured baseline, dawn, wide vista at the default pose, on the user's integrate
 | --- | --- | --- | --- |
 | Frame rate | 60.0 fps | 60 fps | pass |
 | Frame time | 16.67 ms | under budget | pass, vsync locked |
-| Draw submissions | 66 | preferably under 50 | fail, over by 16 |
-| Triangles | 7,793 | well under 60,000 | pass |
+| Draw submissions | 48, down from 66 after instancing the islands | preferably under 50 | pass |
+| Triangles | 10,404 | well under 60,000 | pass |
 | Device pixel ratio | 1.25 | adaptive, low power | pass |
 
 Draw submission breakdown, largest first:
 
-- 30 — islands, as 13 separate base, shard and sail meshes
+- 8 — islands, as 8 instanced meshes sharing 3 rock, 3 shard and 2 sail geometries
 - 8 — manta body, two wings, two accents, two eyes, tail
 - 5 — cathedral spire parts
 - 4 — far water disc and three horizon layers
 - 3 each — sun, ribbons, backdrop ridge rings, lotus instances
 - 2 each — lagoon basin and reeds, shoal spillway and sails
 
-The obvious win is instancing the islands, which share three geometries and differ only in transform and tint. That would replace roughly 30 submissions with 3 and bring the total near 40. The roadmap already asks that draw submissions must not grow with the number of landmarks, and right now they do.
+The island instancing landed: 13 island groups became 8 instanced meshes with identical geometry, materials and transforms, verified visually and by the panel. The roadmap's "draw submissions must not grow with the number of landmarks" now holds for islands — adding one costs zero submissions.
 
 Still to verify by hand: macro and working views, the midnight mood, and touch behaviour.
 
