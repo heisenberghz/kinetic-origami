@@ -36,7 +36,7 @@ export const craneSpecs = [
 
 export const foregroundSailSpecs = [
   [-7.4, 0, 10.4, 0.48, 1.9, -0.32],
-  [8.6, 0, 9.8, -0.42, 1.75, 0.28]
+  [10.4, 0, 11.2, -0.42, 1.15, 0.28]
 ];
 
 export const planRadii = {

@@ -687,7 +687,7 @@ for (let index = 0; index < foregroundSailSpecs.length; index += 1) {
   foregroundTransform.scale.set(scale, scale, scale);
   foregroundTransform.updateMatrix();
   foregroundSails.setMatrixAt(index, foregroundTransform.matrix);
-    foregroundSails.setColorAt(index, index ? new THREE.Color("#c94b32") : new THREE.Color("#b88a32"));
+  foregroundSails.setColorAt(index, index ? new THREE.Color("#c94b32") : new THREE.Color("#b88a32"));
 }
 foregroundSails.instanceMatrix.needsUpdate = true;
 foregroundSails.instanceColor.needsUpdate = true;
