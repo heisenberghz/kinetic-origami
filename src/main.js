@@ -5,6 +5,7 @@ import { createBackdrop } from "./world/backdrop.js";
 import { readHarnessParams, posePresets, createStatsPanel } from "./world/harness.js";
 import { createAtmosphere } from "./world/atmosphere.js";
 import { createIslands } from "./world/islands.js";
+import { createMigration } from "./world/migration.js";
 
 const loadingScreen = document.querySelector("#loading");
 const fallback = document.querySelector("#fallback");
@@ -849,6 +850,8 @@ for (let index = 0; index < craneCount; index += 1) {
   });
 }
 craneInstances.instanceColor.needsUpdate = true;
+
+const migration = createMigration({ cranes, reducedMotion });
 
 const petalGeometry = geometryFromTriangles([
   [[0, 0, 0], [-0.27, 0.025, 0.34], [0, 0.16, 0.42]],
@@ -1875,6 +1878,7 @@ function resetScene() {
     lotus.targetBloom = lotus.initialBloom;
     lotus.bloom = lotus.initialBloom;
   }
+  migration.reset();
   for (const crane of cranes) {
     crane.x = crane.baseX;
     crane.y = crane.baseY;
@@ -2029,6 +2033,7 @@ function updateLotus(delta) {
 function updateCranes(delta) {
   const motion = reducedMotion ? 0.28 : 1;
   const drag = Math.exp(-1.7 * delta);
+  migration.update(delta);
   for (let index = 0; index < cranes.length; index += 1) {
     const crane = cranes[index];
     const creaseResponse = sampleCreaseField(crane.x, crane.z);

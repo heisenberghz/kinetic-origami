@@ -1,3 +1,24 @@
+import { cameraLimits } from "./layout.js";
+
+export const horizonLayerSpecs = [
+  { day: "#5c5346", night: "#263f4d", opacity: 0.2, z: -12.5, height: 4, phase: 0.7, parallax: 0.45 },
+  { day: "#7a6d5b", night: "#1e3544", opacity: 0.17, z: -15, height: 5.2, phase: 2.1, parallax: 0.8 },
+  { day: "#9a8d76", night: "#182c3b", opacity: 0.14, z: -17.5, height: 6.4, phase: 4.3, parallax: 1.2 }
+];
+
+const FOG_NEAR = 14;
+const FOG_FAR = 46;
+
+function smoothstep(edge0, edge1, value) {
+  const t = Math.max(0, Math.min(1, (value - edge0) / (edge1 - edge0)));
+  return t * t * (3 - 2 * t);
+}
+
+export function layerVisibility(spec, camera) {
+  const distance = Math.hypot(camera.x, camera.y - spec.height * 0.5, camera.z - spec.z);
+  return spec.opacity * (1 - smoothstep(FOG_NEAR, FOG_FAR, distance));
+}
+
 export function createHorizon({ THREE, scene, moods }) {
   const geometry = new THREE.CircleGeometry(52, 96);
   geometry.rotateX(-Math.PI / 2);
@@ -79,9 +100,9 @@ gl_FragColor=vec4(color,inner*uOpacity);
     layers.push({ mesh, material: layerMaterial, day: new THREE.Color(dayColor), night: new THREE.Color(nightColor), baseX: 0, baseY: -0.32, phase, parallax });
   }
 
-  addLayer("#5c5346", "#263f4d", 0.2, -22, 5.6, 0.7, 0.45);
-  addLayer("#7a6d5b", "#1e3544", 0.15, -30, 7.2, 2.1, 0.8);
-  addLayer("#9a8d76", "#182c3b", 0.1, -38, 9.4, 4.3, 1.2);
+  for (const spec of horizonLayerSpecs) {
+    addLayer(spec.day, spec.night, spec.opacity, spec.z, spec.height, spec.phase, spec.parallax);
+  }
 
   function applyMood(activeMood, blend) {
     const target = moods[activeMood];
