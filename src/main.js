@@ -5,6 +5,7 @@ import { createBackdrop } from "./world/backdrop.js";
 import { readHarnessParams, posePresets, createStatsPanel } from "./world/harness.js";
 import { createAtmosphere } from "./world/atmosphere.js";
 import { createIslands } from "./world/islands.js";
+import { createOcean } from "./world/ocean.js";
 import { createMigration } from "./world/migration.js";
 
 const loadingScreen = document.querySelector("#loading");
@@ -426,132 +427,10 @@ function geometryFromTriangles(triangles) {
   return geometry;
 }
 
-function addCreaseShader(material, strength) {
-  material.onBeforeCompile = (shader) => {
-    shader.vertexShader = shader.vertexShader
-      .replace("#include <common>", "#include <common>\nattribute vec3 barycentric;\nvarying vec3 vCrease;")
-      .replace("#include <begin_vertex>", "#include <begin_vertex>\nvCrease = barycentric;");
-    shader.fragmentShader = shader.fragmentShader
-      .replace("#include <common>", "#include <common>\nvarying vec3 vCrease;")
-      .replace("#include <color_fragment>", `#include <color_fragment>\nfloat creaseEdge = min(min(vCrease.x, vCrease.y), vCrease.z);\nfloat creaseAA = max(fwidth(creaseEdge), 0.0008);\nfloat creaseLine = 1.0 - smoothstep(creaseAA * 0.25, creaseAA * 1.55, creaseEdge);\ndiffuseColor.rgb *= 1.0 - creaseLine * ${strength.toFixed(3)};`);
-  };
-  material.customProgramCacheKey = () => `paper-creases-${strength}`;
-}
-
-function createOceanGeometry() {
-  const rings = qualityTier === "light" ? 18 : 24;
-  const segments = qualityTier === "light" ? 56 : 72;
-  const maximumRadius = 23.5;
-  const positions = [0, 0, 0];
-  const indices = [];
-  const outlineRandom = seededRandom(31415);
-
-  for (let ring = 1; ring <= rings; ring += 1) {
-    const radius = maximumRadius * Math.pow(ring / rings, 1.04);
-    for (let segment = 0; segment < segments; segment += 1) {
-      const angle = segment / segments * TAU;
-      const edgeScale = 1 + Math.sin(angle * 3 + 0.4) * 0.062 + Math.sin(angle * 7 - 0.7) * 0.034 + Math.sin(angle * 13 + 1.9) * 0.017 + (outlineRandom() - 0.5) * 0.014;
-      positions.push(Math.cos(angle) * radius * edgeScale, 0, Math.sin(angle) * radius * edgeScale);
-    }
-  }
-
-  for (let segment = 0; segment < segments; segment += 1) {
-    const current = 1 + segment;
-    const next = 1 + (segment + 1) % segments;
-    indices.push(0, next, current);
-  }
-
-  for (let ring = 1; ring < rings; ring += 1) {
-    const innerStart = 1 + (ring - 1) * segments;
-    const outerStart = 1 + ring * segments;
-    for (let segment = 0; segment < segments; segment += 1) {
-      const nextSegment = (segment + 1) % segments;
-      const innerCurrent = innerStart + segment;
-      const innerNext = innerStart + nextSegment;
-      const outerCurrent = outerStart + segment;
-      const outerNext = outerStart + nextSegment;
-      indices.push(innerCurrent, outerNext, outerCurrent);
-      indices.push(innerCurrent, innerNext, outerNext);
-    }
-  }
-
-  const indexedGeometry = new THREE.BufferGeometry();
-  indexedGeometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
-  indexedGeometry.setIndex(indices);
-  const geometry = indexedGeometry.toNonIndexed();
-  indexedGeometry.dispose();
-  const count = geometry.attributes.position.count;
-  const barycentric = new Float32Array(count * 3);
-  const colors = new Float32Array(count * 3);
-  const uvs = new Float32Array(count * 2);
-  const random = seededRandom(90210);
-  const color = new THREE.Color();
-
-  for (let vertex = 0; vertex < count; vertex += 1) {
-    uvs[vertex * 2] = geometry.attributes.position.array[vertex * 3] / (maximumRadius * 2) + 0.5;
-    uvs[vertex * 2 + 1] = geometry.attributes.position.array[vertex * 3 + 2] / (maximumRadius * 2) + 0.5;
-  }
-
-  for (let vertex = 0; vertex < count; vertex += 3) {
-    const value = 0.78 + random() * 0.2;
-    const warmth = 0.94 + random() * 0.06;
-    for (let corner = 0; corner < 3; corner += 1) {
-      const index = vertex + corner;
-      barycentric[index * 3] = corner === 0 ? 1 : 0;
-      barycentric[index * 3 + 1] = corner === 1 ? 1 : 0;
-      barycentric[index * 3 + 2] = corner === 2 ? 1 : 0;
-      color.setRGB(value, value * warmth, value * (warmth - 0.035));
-      colors[index * 3] = color.r;
-      colors[index * 3 + 1] = color.g;
-      colors[index * 3 + 2] = color.b;
-    }
-  }
-
-  geometry.setAttribute("barycentric", new THREE.BufferAttribute(barycentric, 3));
-  geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
-  geometry.setAttribute("uv", new THREE.BufferAttribute(uvs, 2));
-  geometry.attributes.position.setUsage(THREE.DynamicDrawUsage);
-  geometry.computeVertexNormals();
-  geometry.computeBoundingSphere();
-  return geometry;
-}
-
-const oceanGeometry = createOceanGeometry();
-const ocean = new THREE.Mesh(oceanGeometry, oceanMaterial);
-ocean.name = "faceted paper ocean";
-scene.add(ocean);
-addCreaseShader(oceanMaterial, 0.035);
-
-const oceanBase = new Float32Array(oceanGeometry.attributes.position.array);
-const oceanColors = oceanGeometry.attributes.color.array;
-const oceanBaseColors = new Float32Array(oceanColors);
-const oceanDisplacement = new Float32Array(oceanBase.length / 3);
-const oceanVelocity = new Float32Array(oceanBase.length / 3);
-const oceanVertexCount = oceanBase.length / 3;
-const oceanSwellTerms = 4;
-const oceanSwellRate = new Float32Array([0.58, -0.41, 0.83, 0.26]);
-const oceanSwellGain = new Float32Array([0.1, 0.09, 0.032, 0.055]);
-const oceanSwellSpace = new Float32Array(oceanVertexCount * oceanSwellTerms);
-const oceanSwellCos = new Float32Array(oceanVertexCount * oceanSwellTerms);
-const halfPi = Math.PI * 0.5;
-
-for (let index = 0; index < oceanVertexCount; index += 1) {
-  const x = oceanBase[index * 3];
-  const z = oceanBase[index * 3 + 2];
-  const spatial = [x * 0.43, z * 0.36 + halfPi, (x + z) * 0.72, x * 0.18 - z * 0.23];
-  for (let term = 0; term < oceanSwellTerms; term += 1) {
-    oceanSwellSpace[index * oceanSwellTerms + term] = Math.sin(spatial[term]);
-    oceanSwellCos[index * oceanSwellTerms + term] = Math.cos(spatial[term]);
-  }
-}
-const creaseFieldResolution = qualityTier === "light" ? 49 : 65;
-const creaseFieldSize = 48;
-const creaseFieldStep = creaseFieldSize / (creaseFieldResolution - 1);
-const creaseFieldTarget = new Float32Array(creaseFieldResolution * creaseFieldResolution);
-const creaseFieldMemory = new Float32Array(creaseFieldResolution * creaseFieldResolution);
-const creaseFieldVelocity = new Float32Array(creaseFieldResolution * creaseFieldResolution);
-let creaseGradientX = 0;
-let creaseGradientZ = 0;
+const oceanWorld = createOcean({ THREE, scene, qualityTier, material: oceanMaterial });
+const ocean = oceanWorld.mesh;
+const sampleCreaseField = oceanWorld.sample;
+const stampCreaseSegment = oceanWorld.stampSegment;
 const creaseStrokeLimit = qualityTier === "light" ? 8 : 10;
 const creasePointLimit = qualityTier === "light" ? 10 : 12;
 const creaseStrokes = Array.from({ length: creaseStrokeLimit }, (_, strokeIndex) => ({
@@ -1169,34 +1048,6 @@ function activateFoldImpulse(x, z, previousX, previousZ, velocityX, velocityZ, e
   renderDirty = true;
 }
 
-function sampleCreaseField(x, z) {
-  const half = creaseFieldSize * 0.5;
-  if (x < -half || x > half || z < -half || z > half) {
-    creaseGradientX = 0;
-    creaseGradientZ = 0;
-    return 0;
-  }
-  const gridX = clamp((x + half) / creaseFieldStep, 0, creaseFieldResolution - 1.001);
-  const gridZ = clamp((z + half) / creaseFieldStep, 0, creaseFieldResolution - 1.001);
-  const x0 = Math.floor(gridX);
-  const z0 = Math.floor(gridZ);
-  const x1 = Math.min(x0 + 1, creaseFieldResolution - 1);
-  const z1 = Math.min(z0 + 1, creaseFieldResolution - 1);
-  const leftX = Math.max(0, x0 - 1);
-  const rightX = Math.min(creaseFieldResolution - 1, x0 + 1);
-  const upZ = Math.max(0, z0 - 1);
-  const downZ = Math.min(creaseFieldResolution - 1, z0 + 1);
-  const row0 = z0 * creaseFieldResolution;
-  const row1 = z1 * creaseFieldResolution;
-  creaseGradientX = (creaseFieldMemory[row0 + rightX] - creaseFieldMemory[row0 + leftX]) / Math.max(creaseFieldStep, (rightX - leftX) * creaseFieldStep);
-  creaseGradientZ = (creaseFieldMemory[downZ * creaseFieldResolution + x0] - creaseFieldMemory[upZ * creaseFieldResolution + x0]) / Math.max(creaseFieldStep, (downZ - upZ) * creaseFieldStep);
-  const tx = gridX - x0;
-  const tz = gridZ - z0;
-  const top = creaseFieldMemory[row0 + x0] + (creaseFieldMemory[row0 + x1] - creaseFieldMemory[row0 + x0]) * tx;
-  const bottom = creaseFieldMemory[row1 + x0] + (creaseFieldMemory[row1 + x1] - creaseFieldMemory[row1 + x0]) * tx;
-  return top + (bottom - top) * tz;
-}
-
 function scatterCranes(strength = 1) {
   markDirectMotion(900);
   if (sceneTime - lastScatterAt < 0.28) return;
@@ -1693,67 +1544,11 @@ function updateCamera(delta) {
   updateRegionReadout();
 }
 
-function stampCreaseSegment(start, end, factor) {
-  const segmentX = end.x - start.x;
-  const segmentZ = end.z - start.z;
-  const lengthSquared = segmentX * segmentX + segmentZ * segmentZ;
-  if (lengthSquared < 0.0001) return;
-  const length = Math.sqrt(lengthSquared);
-  const width = Math.max(0.28, (start.width + end.width) * 0.5);
-  const radius = width * 2.7 + 0.22;
-  const minimumX = Math.max(-creaseFieldSize * 0.5, Math.min(start.x, end.x) - radius);
-  const maximumX = Math.min(creaseFieldSize * 0.5, Math.max(start.x, end.x) + radius);
-  const minimumZ = Math.max(-creaseFieldSize * 0.5, Math.min(start.z, end.z) - radius);
-  const maximumZ = Math.min(creaseFieldSize * 0.5, Math.max(start.z, end.z) + radius);
-  const gridMinimumX = clamp(Math.floor((minimumX + creaseFieldSize * 0.5) / creaseFieldStep), 0, creaseFieldResolution - 1);
-  const gridMaximumX = clamp(Math.ceil((maximumX + creaseFieldSize * 0.5) / creaseFieldStep), 0, creaseFieldResolution - 1);
-  const gridMinimumZ = clamp(Math.floor((minimumZ + creaseFieldSize * 0.5) / creaseFieldStep), 0, creaseFieldResolution - 1);
-  const gridMaximumZ = clamp(Math.ceil((maximumZ + creaseFieldSize * 0.5) / creaseFieldStep), 0, creaseFieldResolution - 1);
-  const inverseLengthSquared = 1 / lengthSquared;
-  const amplitude = (start.impulse + end.impulse) * 0.5 * (start.decay + end.decay) * 0.5;
-
-  for (let gridZ = gridMinimumZ; gridZ <= gridMaximumZ; gridZ += 1) {
-    const z = -creaseFieldSize * 0.5 + (gridZ + 0.5) * creaseFieldStep;
-    for (let gridX = gridMinimumX; gridX <= gridMaximumX; gridX += 1) {
-      const x = -creaseFieldSize * 0.5 + (gridX + 0.5) * creaseFieldStep;
-      const offsetX = x - start.x;
-      const offsetZ = z - start.z;
-      const projection = clamp((offsetX * segmentX + offsetZ * segmentZ) * inverseLengthSquared, 0, 1);
-      const closestX = offsetX - segmentX * projection;
-      const closestZ = offsetZ - segmentZ * projection;
-      const distanceSquared = closestX * closestX + closestZ * closestZ;
-      if (distanceSquared > radius * radius) continue;
-      const signedSide = Math.tanh((segmentX * closestZ - segmentZ * closestX) / Math.max(0.08, width * 0.58));
-      const profile = Math.exp(-distanceSquared / (width * width));
-      const fieldIndex = gridZ * creaseFieldResolution + gridX;
-      creaseFieldTarget[fieldIndex] += amplitude * profile * signedSide * factor;
-    }
-  }
-}
-
 let lastMantaWakeAt = -10;
 
 function depositMantaWake(x, z, speed) {
-  if (sceneTime - lastMantaWakeAt < 0.12 || speed < 0.45) return;
-  lastMantaWakeAt = sceneTime;
-  const radius = 1.1 + Math.min(0.8, speed * 0.035);
-  const amplitude = clamp(speed * 0.0025, 0.004, 0.025);
-  const half = creaseFieldSize * 0.5;
-  const gridMinimumX = clamp(Math.floor((x - radius + half) / creaseFieldStep), 0, creaseFieldResolution - 1);
-  const gridMaximumX = clamp(Math.ceil((x + radius + half) / creaseFieldStep), 0, creaseFieldResolution - 1);
-  const gridMinimumZ = clamp(Math.floor((z - radius + half) / creaseFieldStep), 0, creaseFieldResolution - 1);
-  const gridMaximumZ = clamp(Math.ceil((z + radius + half) / creaseFieldStep), 0, creaseFieldResolution - 1);
-  for (let gridZ = gridMinimumZ; gridZ <= gridMaximumZ; gridZ += 1) {
-    const sampleZ = -half + (gridZ + 0.5) * creaseFieldStep;
-    for (let gridX = gridMinimumX; gridX <= gridMaximumX; gridX += 1) {
-      const sampleX = -half + (gridX + 0.5) * creaseFieldStep;
-      const distance = Math.hypot(sampleX - x, sampleZ - z);
-      if (distance > radius) continue;
-      creaseFieldMemory[gridZ * creaseFieldResolution + gridX] = clamp(creaseFieldMemory[gridZ * creaseFieldResolution + gridX] - amplitude * (1 - distance / radius), -0.72, 0.72);
-    }
-  }
+  if (oceanWorld.depositWake(x, z, speed, 0.45, lastMantaWakeAt, sceneTime)) lastMantaWakeAt = sceneTime;
 }
-
 function writeCreaseLineVertex(vertexIndex, x, y, z, alpha, tone) {
   const positionIndex = vertexIndex * 3;
   creaseLinePositions[positionIndex] = x;
@@ -1801,7 +1596,7 @@ function updateCreaseLines() {
 }
 
 function updateCreaseSystem(delta) {
-  creaseFieldTarget.fill(0);
+  oceanWorld.clearTarget();
   for (const stroke of creaseStrokes) {
     if (!stroke.active) continue;
     stroke.age += delta;
@@ -1815,13 +1610,7 @@ function updateCreaseSystem(delta) {
     }
   }
 
-  const damping = Math.exp(-6.4 * delta);
-  for (let index = 0; index < creaseFieldMemory.length; index += 1) {
-    const target = clamp(creaseFieldTarget[index], -0.72, 0.72);
-    const velocity = (creaseFieldVelocity[index] + (target - creaseFieldMemory[index]) * 54 * delta) * damping;
-    creaseFieldVelocity[index] = velocity;
-    creaseFieldMemory[index] += velocity * delta;
-  }
+  oceanWorld.relax(delta);
   foldEnergy *= Math.exp(-1.25 * delta);
   motionEnergy = damp(motionEnergy, clamp(cameraSpeed * 0.012 + foldEnergy * 0.58, 0, 0.68), 4.2, delta);
 }
@@ -1834,9 +1623,7 @@ function clearCreaseMemory() {
     stroke.cursor = 0;
   }
   creaseCursor = 0;
-  creaseFieldTarget.fill(0);
-  creaseFieldMemory.fill(0);
-  creaseFieldVelocity.fill(0);
+  oceanWorld.clearField();
   creaseLinePositions.fill(0);
   creaseLineAlpha.fill(0);
   creaseLineTone.fill(0);
@@ -1891,53 +1678,6 @@ function resetScene() {
   }
   markDirectMotion(900);
   announce("The archipelago, lotuses, cranes, and crease memory were reset.");
-}
-
-function updateOcean(delta) {
-  const motion = reducedMotion ? 0.32 : 1;
-  const positions = oceanGeometry.attributes.position.array;
-  const count = oceanVertexCount;
-  const damping = Math.exp(-8.4 * delta);
-  const ambientGain = motion * (1 + motionEnergy * 0.72);
-  const swellSin0 = Math.sin(sceneTime * oceanSwellRate[0]);
-  const swellCos0 = Math.cos(sceneTime * oceanSwellRate[0]);
-  const swellSin1 = Math.sin(sceneTime * oceanSwellRate[1]);
-  const swellCos1 = Math.cos(sceneTime * oceanSwellRate[1]);
-  const swellSin2 = Math.sin(sceneTime * oceanSwellRate[2]);
-  const swellCos2 = Math.cos(sceneTime * oceanSwellRate[2]);
-  const swellSin3 = Math.sin(sceneTime * oceanSwellRate[3]);
-  const swellCos3 = Math.cos(sceneTime * oceanSwellRate[3]);
-  for (let index = 0; index < count; index += 1) {
-    const positionIndex = index * 3;
-    const tableIndex = index * oceanSwellTerms;
-    const x = oceanBase[positionIndex];
-    const z = oceanBase[positionIndex + 2];
-    const ambient = (
-      (oceanSwellSpace[tableIndex] * swellCos0 + oceanSwellCos[tableIndex] * swellSin0) * oceanSwellGain[0] +
-      (oceanSwellSpace[tableIndex + 1] * swellCos1 + oceanSwellCos[tableIndex + 1] * swellSin1) * oceanSwellGain[1] +
-      (oceanSwellSpace[tableIndex + 2] * swellCos2 + oceanSwellCos[tableIndex + 2] * swellSin2) * oceanSwellGain[2] +
-      (oceanSwellSpace[tableIndex + 3] * swellCos3 + oceanSwellCos[tableIndex + 3] * swellSin3) * oceanSwellGain[3]
-    ) * ambientGain;
-    const hinge = sampleCreaseField(x, z);
-    const lateralScale = 0.16 + Math.abs(hinge) * 0.62;
-    const displacedX = x + clamp(creaseGradientX * lateralScale, -0.3, 0.3);
-    const displacedZ = z + clamp(creaseGradientZ * lateralScale, -0.3, 0.3);
-    const target = ambient + hinge * 1.45;
-    const directionalShade = clamp(hinge * 0.9 - creaseGradientX * 0.22 + creaseGradientZ * 0.14, -0.55, 0.75);
-    const shadeFactor = 1 + directionalShade;
-    const highlight = clamp(directionalShade * 0.16, -0.06, 0.12);
-    oceanColors[positionIndex] = clamp(oceanBaseColors[positionIndex] * shadeFactor + highlight, 0, 1);
-    oceanColors[positionIndex + 1] = clamp(oceanBaseColors[positionIndex + 1] * shadeFactor + highlight * 0.8, 0, 1);
-    oceanColors[positionIndex + 2] = clamp(oceanBaseColors[positionIndex + 2] * shadeFactor, 0, 1);
-    const velocity = (oceanVelocity[index] + (target - oceanDisplacement[index]) * 76 * delta) * damping;
-    oceanVelocity[index] = velocity;
-    oceanDisplacement[index] += velocity * delta;
-    positions[positionIndex] = displacedX;
-    positions[positionIndex + 1] = oceanDisplacement[index];
-    positions[positionIndex + 2] = displacedZ;
-  }
-  oceanGeometry.attributes.position.needsUpdate = true;
-  oceanGeometry.attributes.color.needsUpdate = true;
 }
 
 function updateManta(delta) {
@@ -2131,7 +1871,7 @@ function animate() {
   if (!paused) sceneTime += sceneDelta;
   updateCamera(sceneDelta);
   updateCreaseSystem(sceneDelta);
-  updateOcean(sceneDelta);
+  oceanWorld.update(sceneDelta, { reducedMotion, motionEnergy, sceneTime });
   updateManta(sceneDelta);
   updateLotus(sceneDelta);
   updateCranes(sceneDelta);
