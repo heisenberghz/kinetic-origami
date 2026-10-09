@@ -61,11 +61,13 @@ test("main.js no longer reaches into the extracted ocean internals", () => {
 
 test("main.js drives the ocean only through its public surface", () => {
   const oceanSource = readFileSync(join(projectRoot, "src", "world", "ocean.js"), "utf8");
-  const exported = oceanSource.match(/return \{ ([^}]*) \};\s*$/m);
+  const exported = oceanSource.match(/return \{([\s\S]*?)\n {2}\};/);
   assert.ok(exported, "ocean.js no longer returns a public surface");
-  const surface = new Set(exported[1].split(",").map((name) => name.trim()).filter(Boolean));
+  const surface = new Set(
+    [...exported[1].matchAll(/(?:^|[\s{,])([a-zA-Z_$][\w$]*)(?=\s*[,}])/g)].map((match) => match[1])
+  );
 
-  for (const required of ["mesh", "sample", "stampSegment", "depositWake", "clearTarget", "relax", "clearField", "update"]) {
+  for (const required of ["mesh", "sample", "stampSegment", "depositWake", "clearTarget", "relax", "clearField", "recentre", "update"]) {
     assert.ok(surface.has(required), `ocean.js stopped exporting ${required}`);
   }
 

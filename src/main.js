@@ -1860,7 +1860,7 @@ function animate() {
   applyLookKeys(sceneDelta);
   updateCamera(sceneDelta);
   updateCreaseSystem(sceneDelta);
-  oceanWorld.update(sceneDelta, { reducedMotion, motionEnergy, sceneTime });
+  oceanWorld.update(sceneDelta, { reducedMotion, motionEnergy, sceneTime, originX: presence.state.x, originZ: presence.state.z });
   updateManta(sceneDelta);
   updateLotus(sceneDelta);
   updateCranes(sceneDelta);

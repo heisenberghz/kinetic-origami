@@ -208,6 +208,103 @@ test("manta wakes are rate limited and only accepted above the speed gate", () =
   assert.ok(ocean.sample(0, 0) < 0, "a wake pushes the surface downward but the field stayed positive");
 });
 
+test("the crease field follows the player across the whole playable area", () => {
+  const { ocean } = createTestOcean();
+  const halfWidth = 24;
+  const waypoints = [
+    { x: 0, z: 0 }, { x: 20, z: 18 }, { x: -20, z: -18 }, { x: 40, z: 30 },
+    { x: -40, z: -30 }, { x: 58, z: 0 }, { x: 0, z: -58 }, { x: -58, z: 40 }, { x: 0, z: 0 }
+  ];
+  let x = 0;
+  let z = 0;
+  let steps = 0;
+  let worst = 0;
+  for (let index = 1; index < waypoints.length; index += 1) {
+    const target = waypoints[index];
+    for (let guard = 0; guard < 200000; guard += 1) {
+      const dx = target.x - x;
+      const dz = target.z - z;
+      const distance = Math.hypot(dx, dz);
+      if (distance <= 1e-6) {
+        x = target.x;
+        z = target.z;
+        break;
+      }
+      const travel = Math.min(distance, 2.4 / 60);
+      x += (dx / distance) * travel;
+      z += (dz / distance) * travel;
+      if (Math.hypot(target.x - x, target.z - z) <= 2.4 / 60) {
+        x = target.x;
+        z = target.z;
+      }
+      ocean.update(1 / 60, { reducedMotion: false, motionEnergy: 0, sceneTime: steps / 60, originX: x, originZ: z });
+      if (Number.isFinite(ocean.originX) && Number.isFinite(ocean.originZ)) {
+        worst = Math.max(worst, Math.abs(ocean.originX - x), Math.abs(ocean.originZ - z));
+      }
+      steps += 1;
+    }
+    assert.ok(worst <= halfWidth, `on the way to (${target.x}, ${target.z}) the player drifted up to ${worst.toFixed(2)} units from the field centre`);
+  }
+  assert.ok(steps > 1000, `the walk was only ${steps} steps, so it never actually crossed the map`);
+  assert.ok(Number.isFinite(worst), "the field centre became a non-finite value while travelling");
+  assert.ok(worst > 0, "the field centre never moved, so it cannot follow the player");
+  assert.ok(worst <= halfWidth, `the player drifted up to ${worst.toFixed(2)} units from the field centre, past its ${halfWidth} unit half-width`);
+});
+
+test("a fold made far from the origin still deforms the water", () => {
+  const { ocean } = createTestOcean();
+  const far = { x: 44, z: -26 };
+  for (let frame = 0; frame < 4; frame += 1) {
+    ocean.update(1 / 60, { reducedMotion: false, motionEnergy: 0, sceneTime: frame / 60, originX: far.x, originZ: far.z });
+  }
+  fold(ocean, foldPoint(far.x - 3, far.z), foldPoint(far.x + 3, far.z));
+  let deepest = 0;
+  let highest = 0;
+  for (let frame = 0; frame < 60; frame += 1) {
+    ocean.update(1 / 60, { reducedMotion: false, motionEnergy: 0.4, sceneTime: frame / 60, originX: far.x, originZ: far.z });
+    const positions = ocean.geometry.attributes.position.array;
+    for (let index = 1; index < positions.length; index += 3) {
+      deepest = Math.min(deepest, positions[index]);
+      highest = Math.max(highest, positions[index]);
+    }
+  }
+  assert.ok(allFinite(ocean.geometry.attributes.position.array));
+  assert.ok(highest - deepest > 0.05, "the distant fold produced no readable ridge or trough");
+});
+
+test("a fold stays where it was made after the player travels away", () => {
+  const { ocean } = createTestOcean();
+  fold(ocean, foldPoint(0, 0), foldPoint(4, 0));
+  const folded = Math.abs(ocean.sample(0, -0.2)) + Math.abs(ocean.sample(0, 0.2));
+  assert.ok(folded > 0.01, "the test fold never took effect");
+  ocean.update(1 / 60, { reducedMotion: false, motionEnergy: 0, sceneTime: 0, originX: 30, originZ: 0 });
+  const afterMove = Math.abs(ocean.sample(0, -0.2)) + Math.abs(ocean.sample(0, 0.2));
+  assert.ok(Math.abs(afterMove - folded) < 0.02, `the fold moved with the player, ${folded.toFixed(4)} became ${afterMove.toFixed(4)}`);
+});
+
+test("memory that scrolls off the field is discarded, not wrapped around", () => {
+  const { ocean } = createTestOcean();
+  fold(ocean, foldPoint(-20, 0), foldPoint(-20, 4));
+  assert.ok(Math.abs(ocean.sample(-20, -0.2)) > 0.001, "the starting fold never took effect");
+  for (let frame = 0; frame < 6; frame += 1) {
+    ocean.update(1 / 60, { reducedMotion: false, motionEnergy: 0, sceneTime: frame / 60, originX: 50, originZ: 0 });
+  }
+  assert.equal(ocean.sample(-20, -0.2), 0, "stale crease memory wrapped into the new field instead of being dropped");
+});
+
+test("the field stays centred on the player without chattering", () => {
+  const { ocean } = createTestOcean();
+  let shifts = 0;
+  let previousX = ocean.originX;
+  for (let frame = 0; frame < 600; frame += 1) {
+    ocean.update(1 / 60, { reducedMotion: false, motionEnergy: 0, sceneTime: frame / 60, originX: frame * 0.05, originZ: 0 });
+    if (ocean.originX !== previousX) shifts += 1;
+    previousX = ocean.originX;
+  }
+  assert.ok(shifts > 0, "the field never recentred while the player walked 30 units");
+  assert.ok(shifts < 120, `the field recentred ${shifts} times over 600 frames, which will show as a stutter`);
+});
+
 test("clearing the field wipes crease memory and velocity", () => {
   const { ocean } = createTestOcean();
   fold(ocean, foldPoint(-3, 0), foldPoint(3, 0));

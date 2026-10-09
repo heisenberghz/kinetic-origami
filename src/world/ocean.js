@@ -144,16 +144,60 @@ export function createOcean({ THREE, scene, qualityTier, material }) {
   const fieldVelocity = new Float32Array(fieldResolution * fieldResolution);
   let gradientX = 0;
   let gradientZ = 0;
+  let fieldOriginX = 0;
+  let fieldOriginZ = 0;
+
+  function shiftField(cellsX, cellsZ) {
+    if (cellsX === 0 && cellsZ === 0) return;
+    for (let row = 0; row < fieldResolution; row += 1) {
+      const sourceZ = row + cellsZ;
+      for (let column = 0; column < fieldResolution; column += 1) {
+        const sourceX = column + cellsX;
+        const destination = row * fieldResolution + column;
+        if (sourceX < 0 || sourceX >= fieldResolution || sourceZ < 0 || sourceZ >= fieldResolution) {
+          fieldTarget[destination] = 0;
+          fieldMemory[destination] = 0;
+          fieldVelocity[destination] = 0;
+        } else {
+          const source = sourceZ * fieldResolution + sourceX;
+          fieldTarget[destination] = fieldTarget[source];
+          fieldMemory[destination] = fieldMemory[source];
+          fieldVelocity[destination] = fieldVelocity[source];
+        }
+      }
+    }
+    fieldOriginX += cellsX * fieldStep;
+    fieldOriginZ += cellsZ * fieldStep;
+  }
+
+  function recentre(worldX, worldZ) {
+    const half = fieldSize * 0.5;
+    const edge = half - fieldStep * 2;
+    for (let pass = 0; pass < 4; pass += 1) {
+      const localX = worldX - fieldOriginX;
+      const localZ = worldZ - fieldOriginZ;
+      let cellsX = 0;
+      let cellsZ = 0;
+      if (localX > edge) cellsX = Math.floor(localX - edge);
+      else if (localX < -edge) cellsX = Math.floor(localX + edge);
+      if (localZ > edge) cellsZ = Math.floor(localZ - edge);
+      else if (localZ < -edge) cellsZ = Math.floor(localZ + edge);
+      if (cellsX === 0 && cellsZ === 0) return;
+      shiftField(cellsX, cellsZ);
+    }
+  }
 
   function sample(x, z) {
     const half = fieldSize * 0.5;
-    if (x < -half || x > half || z < -half || z > half) {
+    const localX = x - fieldOriginX;
+    const localZ = z - fieldOriginZ;
+    if (localX < -half || localX > half || localZ < -half || localZ > half) {
       gradientX = 0;
       gradientZ = 0;
       return 0;
     }
-    const gridX = clamp((x + half) / fieldStep, 0, fieldResolution - 1.001);
-    const gridZ = clamp((z + half) / fieldStep, 0, fieldResolution - 1.001);
+    const gridX = clamp((localX + half) / fieldStep, 0, fieldResolution - 1.001);
+    const gridZ = clamp((localZ + half) / fieldStep, 0, fieldResolution - 1.001);
     const x0 = Math.floor(gridX);
     const z0 = Math.floor(gridZ);
     const x1 = Math.min(x0 + 1, fieldResolution - 1);
@@ -181,10 +225,14 @@ export function createOcean({ THREE, scene, qualityTier, material }) {
     const width = Math.max(0.28, (start.width + end.width) * 0.5);
     const radius = width * 2.7 + 0.22;
     const half = fieldSize * 0.5;
-    const gridMinimumX = clamp(Math.floor((Math.max(-half, Math.min(start.x, end.x) - radius) + half) / fieldStep), 0, fieldResolution - 1);
-    const gridMaximumX = clamp(Math.ceil((Math.min(half, Math.max(start.x, end.x) + radius) + half) / fieldStep), 0, fieldResolution - 1);
-    const gridMinimumZ = clamp(Math.floor((Math.max(-half, Math.min(start.z, end.z) - radius) + half) / fieldStep), 0, fieldResolution - 1);
-    const gridMaximumZ = clamp(Math.ceil((Math.min(half, Math.max(start.z, end.z) + radius) + half) / fieldStep), 0, fieldResolution - 1);
+    const startX = start.x - fieldOriginX;
+    const startZ = start.z - fieldOriginZ;
+    const endX = end.x - fieldOriginX;
+    const endZ = end.z - fieldOriginZ;
+    const gridMinimumX = clamp(Math.floor((Math.max(-half, Math.min(startX, endX) - radius) + half) / fieldStep), 0, fieldResolution - 1);
+    const gridMaximumX = clamp(Math.ceil((Math.min(half, Math.max(startX, endX) + radius) + half) / fieldStep), 0, fieldResolution - 1);
+    const gridMinimumZ = clamp(Math.floor((Math.max(-half, Math.min(startZ, endZ) - radius) + half) / fieldStep), 0, fieldResolution - 1);
+    const gridMaximumZ = clamp(Math.ceil((Math.min(half, Math.max(startZ, endZ) + radius) + half) / fieldStep), 0, fieldResolution - 1);
     const inverseLengthSquared = 1 / lengthSquared;
     const amplitude = (start.impulse + end.impulse) * 0.5 * (start.decay + end.decay) * 0.5;
 
@@ -192,8 +240,8 @@ export function createOcean({ THREE, scene, qualityTier, material }) {
       const z = -half + (gridZ + 0.5) * fieldStep;
       for (let gridX = gridMinimumX; gridX <= gridMaximumX; gridX += 1) {
         const x = -half + (gridX + 0.5) * fieldStep;
-        const offsetX = x - start.x;
-        const offsetZ = z - start.z;
+        const offsetX = x - startX;
+        const offsetZ = z - startZ;
         const projection = clamp((offsetX * segmentX + offsetZ * segmentZ) * inverseLengthSquared, 0, 1);
         const closestX = offsetX - segmentX * projection;
         const closestZ = offsetZ - segmentZ * projection;
@@ -211,15 +259,17 @@ export function createOcean({ THREE, scene, qualityTier, material }) {
     const radius = 1.1 + Math.min(0.8, speed * 0.035);
     const amplitude = clamp(speed * 0.0025, 0.004, 0.025);
     const half = fieldSize * 0.5;
-    const gridMinimumX = clamp(Math.floor((x - radius + half) / fieldStep), 0, fieldResolution - 1);
-    const gridMaximumX = clamp(Math.ceil((x + radius + half) / fieldStep), 0, fieldResolution - 1);
-    const gridMinimumZ = clamp(Math.floor((z - radius + half) / fieldStep), 0, fieldResolution - 1);
-    const gridMaximumZ = clamp(Math.ceil((z + radius + half) / fieldStep), 0, fieldResolution - 1);
+    const localX = x - fieldOriginX;
+    const localZ = z - fieldOriginZ;
+    const gridMinimumX = clamp(Math.floor((localX - radius + half) / fieldStep), 0, fieldResolution - 1);
+    const gridMaximumX = clamp(Math.ceil((localX + radius + half) / fieldStep), 0, fieldResolution - 1);
+    const gridMinimumZ = clamp(Math.floor((localZ - radius + half) / fieldStep), 0, fieldResolution - 1);
+    const gridMaximumZ = clamp(Math.ceil((localZ + radius + half) / fieldStep), 0, fieldResolution - 1);
     for (let gridZ = gridMinimumZ; gridZ <= gridMaximumZ; gridZ += 1) {
       const sampleZ = -half + (gridZ + 0.5) * fieldStep;
       for (let gridX = gridMinimumX; gridX <= gridMaximumX; gridX += 1) {
         const sampleX = -half + (gridX + 0.5) * fieldStep;
-        const distance = Math.hypot(sampleX - x, sampleZ - z);
+        const distance = Math.hypot(sampleX - localX, sampleZ - localZ);
         if (distance > radius) continue;
         const fieldIndex = gridZ * fieldResolution + gridX;
         fieldMemory[fieldIndex] = clamp(fieldMemory[fieldIndex] - amplitude * (1 - distance / radius), -0.72, 0.72);
@@ -250,6 +300,7 @@ export function createOcean({ THREE, scene, qualityTier, material }) {
 
   function update(delta, state) {
     const motion = state.reducedMotion ? 0.32 : 1;
+    recentre(state.originX, state.originZ);
     const out = geometry.attributes.position.array;
     const damping = Math.exp(-8.4 * delta);
     const ambientGain = motion * (1 + state.motionEnergy * 0.72);
@@ -296,5 +347,18 @@ export function createOcean({ THREE, scene, qualityTier, material }) {
     geometry.attributes.color.needsUpdate = true;
   }
 
-  return { mesh, geometry, sample, stampSegment, depositWake, clearTarget, relax, clearField, update };
+  return {
+    mesh,
+    geometry,
+    sample,
+    stampSegment,
+    depositWake,
+    clearTarget,
+    relax,
+    clearField,
+    recentre,
+    update,
+    get originX() { return fieldOriginX; },
+    get originZ() { return fieldOriginZ; }
+  };
 }
