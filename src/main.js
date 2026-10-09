@@ -159,6 +159,7 @@ presence.state.pitch = initialViewProfile.startPitch;
 const travelInput = { forward: 0, strafe: 0, boost: false };
 const heldKeys = new Set();
 let steeringPointerDelta = 0;
+let lookDirection = 1;
 
 let sceneTime = 0;
 let pointerSeen = false;
@@ -1164,7 +1165,7 @@ canvas.addEventListener("pointerdown", (event) => {
     foldHasLastPoint = false;
     pointerDownOcean = false;
     setHoveredLotus(null);
-    for (const pointerState of interactivePointers.values()) pointerState.mode = "orbit";
+    for (const pointerState of interactivePointers.values()) pointerState.mode = "look";
   }
 });
 
@@ -1183,7 +1184,7 @@ canvas.addEventListener("pointermove", (event) => {
     const second = iterator.next().value;
     const centerX = (first.x + second.x) * 0.5;
     const centerY = (first.y + second.y) * 0.5;
-    presence.look((centerX - orbitCenterX) * 0.0034, (centerY - orbitCenterY) * 0.0026);
+    presence.look(-(centerX - orbitCenterX) * 0.0052, -(centerY - orbitCenterY) * 0.004);
     orbitCenterX = centerX;
     orbitCenterY = centerY;
     pointerMoved = true;
@@ -1209,7 +1210,7 @@ canvas.addEventListener("pointermove", (event) => {
       presence.dragTravel(deltaX, deltaY);
     } else if (stored.mode === "look") {
       markDirectMotion(650);
-      presence.look(-deltaX * 0.0042, -deltaY * 0.0032);
+      presence.look(-deltaX * 0.0062, -deltaY * 0.0046);
     } else {
       const eventTime = performance.now();
       if (eventTime - lastFoldRaycastAt < 24) {
@@ -1276,7 +1277,7 @@ function releasePointer(event, cancelled) {
     }
   } else if (wasPrimary && releasedMode === "fold" && !cancelled && pointerMoved && foldHasLastPoint) {
     markDirectMotion(700);
-  } else if (wasPrimary && releasedMode === "orbit") {
+  } else if (wasPrimary && releasedMode === "look") {
     markDirectMotion(700);
   }
 
@@ -1333,10 +1334,12 @@ canvas.addEventListener("pointerleave", () => {
 
 canvas.addEventListener("wheel", (event) => {
   event.preventDefault();
-  const zoom = clamp(event.deltaY, -120, 120);
-  presence.look(-zoom * 0.0016, 0);
+  const scroll = clamp(event.deltaY, -120, 120);
+  const sideways = clamp(event.deltaX, -120, 120);
+  presence.look((-scroll * 0.0016 + sideways * 0.0032) * lookDirection, 0);
+  if (Math.abs(scroll) > 4) presence.adjustHeight(clamp(scroll, -60, 60) * 0.0022);
   markDirectMotion(900);
-  if (Math.abs(zoom) > 24) scatterCranes(0.45);
+  if (Math.abs(scroll) > 24 || Math.abs(sideways) > 24) scatterCranes(0.45);
   renderDirty = true;
 }, { passive: false });
 
@@ -1372,8 +1375,8 @@ function beginFoldHold() {
 }
 
 const travelKeys = new Set(["w", "a", "s", "d", "shift"]);
-const lookKeys = new Set(["arrowleft", "arrowright", "arrowup", "arrowdown", "q", "e"]);
-const lookRate = 0.0042;
+const lookKeys = new Set(["arrowleft", "arrowright", "arrowup", "arrowdown", "q", "e", "c", "z"]);
+const lookRate = 0.0135;
 
 function syncTravelInput() {
   travelInput.forward = (heldKeys.has("w") ? 1 : 0) - (heldKeys.has("s") ? 1 : 0);
@@ -1385,12 +1388,16 @@ function syncTravelInput() {
 function applyLookKeys(delta) {
   let yawDelta = 0;
   let pitchDelta = 0;
+  let heightDelta = 0;
   if (heldKeys.has("arrowleft")) yawDelta += 1;
   if (heldKeys.has("arrowright")) yawDelta -= 1;
   if (heldKeys.has("arrowup")) pitchDelta -= 1;
   if (heldKeys.has("arrowdown")) pitchDelta += 1;
   if (heldKeys.has("q")) pitchDelta -= 1;
   if (heldKeys.has("e")) pitchDelta += 1;
+  if (heldKeys.has("c")) heightDelta += 1;
+  if (heldKeys.has("z")) heightDelta -= 1;
+  if (heightDelta !== 0) presence.adjustHeight(heightDelta * delta * 6);
   if (yawDelta === 0 && pitchDelta === 0) return;
   presence.look(yawDelta * lookRate * delta * 60, pitchDelta * lookRate * delta * 60);
   markDirectMotion(600);
@@ -1909,6 +1916,7 @@ function applyHarnessPose() {
   if (harness.yaw !== null) presence.state.yaw = harness.yaw;
   if (harness.pitch !== null) presence.state.pitch = clamp(harness.pitch, presenceLimits.minPitch, presenceLimits.maxPitch);
   if (harness.speed !== null) presence.limits.cruiseSpeed = clamp(harness.speed, 0.5, 24);
+  if (harness.look !== null) lookDirection = harness.look;
   if (harness.mood) setMood(harness.mood, false);
   if (statsPanel) {
     const parts = [];

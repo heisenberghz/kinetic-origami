@@ -43,6 +43,13 @@ test("harness converts degrees to radians and treats zero as a value", () => {
   assert.equal(zero.speed, 0);
 });
 
+test("the look direction can be flipped for trackpads with natural scrolling", () => {
+  assert.equal(readHarnessParams("").look, null, "no override by default");
+  assert.equal(readHarnessParams("?look=flip").look, -1, "flip should invert");
+  assert.equal(readHarnessParams("?look=normal").look, 1, "normal should be identity");
+  assert.equal(readHarnessParams("?look=nonsense").look, null, "an unknown value should be ignored, not guessed");
+});
+
 test("stats flag is only set when present", () => {
   assert.equal(readHarnessParams("?at=0,0").stats, false);
   assert.equal(readHarnessParams("?stats").stats, true);

@@ -30,6 +30,7 @@ export function readHarnessParams(search) {
     yaw: numberParam(params, "yaw", Math.PI / 180),
     pitch: numberParam(params, "pitch", Math.PI / 180),
     speed: numberParam(params, "speed"),
+    look: params.get("look") === "flip" ? -1 : params.get("look") === "normal" ? 1 : null,
     stats: params.has("stats")
   };
 }

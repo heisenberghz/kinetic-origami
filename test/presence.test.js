@@ -118,6 +118,28 @@ test("a stationary cursor cannot spin the presence forever", () => {
   assert.equal(presence.state.yaw, 0, "the presence rotated on its own with no pointer input");
 });
 
+test("dragging right turns right, and dragging up tilts up", () => {
+  const presence = createPresence();
+  const startYaw = presence.state.yaw;
+  presence.look(-40 * 0.0052, 0);
+  assert.ok(presence.state.yaw < startYaw, `a rightward drag turned left instead, yaw went from ${startYaw} to ${presence.state.yaw}`);
+
+  const tilt = createPresence();
+  tilt.look(0, -30 * 0.004);
+  assert.ok(tilt.state.pitch < 0, `dragging up tilted down instead, pitch went to ${tilt.state.pitch}`);
+});
+
+test("both look paths turn the same way for the same drag", () => {
+  const twoFinger = createPresence();
+  const dragLook = createPresence();
+  const dragRight = 42;
+  twoFinger.look(-(dragRight) * 0.0052, 0);
+  dragLook.look(-dragRight * 0.0062, 0);
+  assert.ok(twoFinger.state.yaw < 0, "the two finger path turned the wrong way");
+  assert.ok(dragLook.state.yaw < 0, "the drag path turned the wrong way");
+  assert.ok(Math.sign(twoFinger.state.yaw) === Math.sign(dragLook.state.yaw), "the two look paths disagree on direction");
+});
+
 test("the presence turns toward the direction the cursor moves", () => {
   const rightward = createPresence();
   rightward.update(1 / 60, { pointerDeltaX: 0.5 });
@@ -132,6 +154,32 @@ test("tiny pointer jitter inside the deadzone is ignored", () => {
   const presence = createPresence();
   run(presence, 2, { pointerDeltaX: 0.0008 });
   assert.ok(Math.abs(presence.state.yaw) < 0.001, `the presence turned ${presence.state.yaw} from cursor jitter`);
+});
+
+test("the presence can rise and fall but never below the water or into the sky", () => {
+  const presence = createPresence();
+  for (let frame = 0; frame < 600; frame += 1) presence.adjustHeight(0.05);
+  presence.update(1 / 60, {});
+  assert.ok(presence.limits.hoverHeight <= presenceLimits.maxHoverHeight + 1e-6, `rose to ${presence.limits.hoverHeight}, above the ceiling`);
+  assert.ok(presence.state.y > 0, "rising pushed the presence underwater");
+
+  for (let frame = 0; frame < 1200; frame += 1) presence.adjustHeight(-0.05);
+  presence.update(1 / 60, {});
+  assert.ok(presence.limits.hoverHeight >= presenceLimits.minHoverHeight - 1e-6, `fell to ${presence.limits.hoverHeight}, below the floor`);
+  assert.ok(presence.state.y > 0, "falling pushed the presence underwater");
+});
+
+test("raising the presence keeps it above the paper while it drifts", () => {
+  const presence = createPresence();
+  presence.adjustHeight(3);
+  run(presence, 4, { forward: 1, boost: true });
+  let lowest = Infinity;
+  for (let frame = 0; frame < 240; frame += 1) {
+    presence.update(1 / 60, { forward: 1, boost: true });
+    lowest = Math.min(lowest, presence.state.y);
+  }
+  assert.ok(lowest > 0, `a raised presence dipped to y=${lowest.toFixed(3)}`);
+  assert.ok(presence.limits.hoverHeight > presenceLimits.hoverHeight, "the raise never took effect");
 });
 
 test("pitch is clamped so the horizon cannot flip", () => {

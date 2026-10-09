@@ -1,5 +1,8 @@
 export const presenceLimits = {
   hoverHeight: 1.2,
+  minHoverHeight: 1.2,
+  maxHoverHeight: 9.5,
+  heightRate: 6,
   minPitch: -0.62,
   maxPitch: 0.42,
   cruiseSpeed: 2.4,
@@ -164,6 +167,10 @@ export function createPresence(options = {}) {
     state.y = limits.hoverHeight + Math.sin(state.bobPhase) * limits.bobHeight;
   }
 
+  function adjustHeight(amount) {
+    limits.hoverHeight = clamp(limits.hoverHeight + amount, limits.minHoverHeight, limits.maxHoverHeight);
+  }
+
   function reset() {
     state.x = 0;
     state.z = 0;
@@ -180,6 +187,7 @@ export function createPresence(options = {}) {
     limits,
     update,
     look,
+    adjustHeight,
     dragTravel,
     glideTo,
     moveTo,
