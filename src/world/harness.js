@@ -1,8 +1,8 @@
-export const posePresets = {
-  cathedral: { x: -4, z: -8.6, radius: 15.5 },
-  lagoon: { x: -9.6, z: 4.4, radius: 13.5 },
-  shoals: { x: 8.6, z: 3.6, radius: 13.5 },
-  open: { x: 0, z: 0, radius: 18.5 }
+export const travelPresets = {
+  cathedral: { x: -4, z: -5.4, yaw: 0 },
+  lagoon: { x: -9.6, z: 7.6, yaw: Math.PI },
+  shoals: { x: 8.6, z: 6.8, yaw: Math.PI },
+  open: { x: 0, z: 0, yaw: 0.5 }
 };
 
 function numberParam(params, key, scale = 1) {
@@ -12,16 +12,24 @@ function numberParam(params, key, scale = 1) {
   return Number.isFinite(value) ? value * scale : null;
 }
 
+function pairParam(params, key) {
+  const raw = params.get(key);
+  if (raw === null || raw.trim() === "") return null;
+  const parts = raw.split(",").map((part) => Number(part.trim()));
+  if (parts.length !== 2 || !parts.every((value) => Number.isFinite(value))) return null;
+  return { x: parts[0], z: parts[1] };
+}
+
 export function readHarnessParams(search) {
   const params = new URLSearchParams(search);
-  const pose = params.get("pose");
+  const at = params.get("at");
   const mood = params.get("mood");
   return {
-    pose: pose && posePresets[pose] ? pose : null,
+    at: pairParam(params, "at"),
     mood: mood === "midnight" || mood === "dawn" ? mood : null,
-    theta: numberParam(params, "orbit", Math.PI / 180),
-    phi: numberParam(params, "phi", Math.PI / 180),
-    radius: numberParam(params, "zoom"),
+    yaw: numberParam(params, "yaw", Math.PI / 180),
+    pitch: numberParam(params, "pitch", Math.PI / 180),
+    speed: numberParam(params, "speed"),
     stats: params.has("stats")
   };
 }
@@ -52,8 +60,11 @@ export function createStatsPanel(document) {
   let draws = 0;
   let triangles = 0;
   let dpr = 0;
-  let radius = 0;
-  let theta = 0;
+  let x = 0;
+  let z = 0;
+  let yawDegrees = 0;
+  let pitchDegrees = 0;
+  let speed = 0;
 
   function render() {
     panel.textContent = [
@@ -63,18 +74,19 @@ export function createStatsPanel(document) {
       `draws  ${draws}`,
       `tris   ${triangles}`,
       `dpr    ${dpr.toFixed(2)}`,
-      `r ${radius.toFixed(1)}  th ${theta}  ph ${(phi * 180 / Math.PI).toFixed(0)}`
+      `at ${x.toFixed(1)}, ${z.toFixed(1)}  spd ${speed.toFixed(1)}`,
+      `yaw ${yawDegrees}  pitch ${pitchDegrees}`
     ].join("\n");
   }
 
-  let phi = 0;
-
   return {
     setHeader(text) { header = text; },
-    setCamera(currentPhi, currentRadius, currentTheta) {
-      phi = currentPhi;
-      radius = currentRadius;
-      theta = Math.round((currentTheta * 180) / Math.PI);
+    setPresence(presenceState) {
+      x = presenceState.x;
+      z = presenceState.z;
+      speed = Math.hypot(presenceState.velocityX, presenceState.velocityZ);
+      yawDegrees = Math.round((presenceState.yaw * 180) / Math.PI);
+      pitchDegrees = Math.round((presenceState.pitch * 180) / Math.PI);
     },
     sample(info, currentDpr) { draws = info.render.calls; triangles = info.render.triangles; dpr = currentDpr; },
     update(frameMilliseconds) {

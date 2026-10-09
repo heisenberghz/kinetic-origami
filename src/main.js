@@ -2,7 +2,8 @@ import { createLandmarks, landmarkMetrics } from "./world/landmarks.js";
 import { regionAt, lotusSpecs, craneSpecs, foregroundSailSpecs, pushOutOfLandmarks } from "./world/layout.js";
 import { createHorizon } from "./world/horizon.js";
 import { createBackdrop } from "./world/backdrop.js";
-import { readHarnessParams, posePresets, createStatsPanel } from "./world/harness.js";
+import { readHarnessParams, createStatsPanel } from "./world/harness.js";
+import { createPresence, presenceLimits } from "./world/presence.js";
 import { createAtmosphere } from "./world/atmosphere.js";
 import { createIslands } from "./world/islands.js";
 import { createOcean } from "./world/ocean.js";
@@ -123,7 +124,7 @@ renderer.toneMappingExposure = 1.08;
 const canvas = renderer.domElement;
 canvas.tabIndex = 0;
 canvas.setAttribute("role", "application");
-canvas.setAttribute("aria-label", "Interactive origami ocean. Drag with one pointer or one finger to fold paper. Alt-drag or use WASD to pan, Shift-drag or right-drag to orbit, and use two fingers to pinch to zoom. Hover or tap lotus flowers. Press B to open and cycle lotuses, Enter to close the keyboard-selected lotus, Space to pause ambient motion, M for mood, and R to reset.");
+canvas.setAttribute("aria-label", "A drifting presence over an interactive origami ocean. Drag to travel through the world, or hold briefly before dragging to fold the paper instead. Move the mouse to steer your heading. Use W A S D to travel and Shift to move faster. Use the arrow keys to look around, or alt-drag and two-finger drag. Hover or tap lotus flowers. Press B to open and cycle lotuses, Enter to close the keyboard-selected lotus, Space to pause ambient motion, M for mood, and R to reset.");
 stage.appendChild(canvas);
 
 const scene = new THREE.Scene();
@@ -136,17 +137,14 @@ const viewProfileFor = (width, height) => {
   return {
     category,
     compact: portrait || narrow,
-    fov: portrait ? 50 : narrow ? 46 : short ? 42 : 40,
-    phi: portrait ? 1.18 : narrow ? 1.16 : short ? 1.12 : 1.15,
-    radius: portrait ? 24.5 : narrow ? 22 : short ? 20 : 18.5,
-    targetY: portrait ? 0.6 : 0.52
+    fov: portrait ? 74 : narrow ? 70 : short ? 64 : 66,
+    hoverHeight: portrait ? 1.35 : 1.2,
+    startYaw: portrait ? 0.34 : 0.5,
+    startPitch: portrait ? -0.06 : -0.08
   };
 };
 const initialViewProfile = viewProfileFor(window.innerWidth, window.innerHeight);
 const camera = new THREE.PerspectiveCamera(initialViewProfile.fov, window.innerWidth / window.innerHeight, 0.25, 160);
-const cameraTarget = new THREE.Vector3(0, initialViewProfile.targetY, 0);
-const panTarget = new THREE.Vector2(0, 0);
-const panCurrent = new THREE.Vector2(0, 0);
 const previousCameraPosition = new THREE.Vector3();
 const pointerNdc = new THREE.Vector2(0, 0);
 const pointerPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -154,21 +152,12 @@ const pointerWorld = new THREE.Vector3();
 const keyboardCursorPoint = new THREE.Vector3();
 const raycaster = new THREE.Raycaster();
 const cameraPush = { x: 0, z: 0 };
-const maxOrbitRadius = 25.5;
 let viewProfile = initialViewProfile;
-let defaultPhi = initialViewProfile.phi;
-let defaultRadius = initialViewProfile.radius;
-const orbit = {
-  currentTheta: 0.64,
-  currentPhi: defaultPhi,
-  currentRadius: defaultRadius,
-  targetTheta: 0.64,
-  targetPhi: defaultPhi,
-  targetRadius: defaultRadius,
-  thetaVelocity: 0,
-  phiVelocity: 0,
-  radiusVelocity: 0
-};
+const presence = createPresence({ limits: { hoverHeight: initialViewProfile.hoverHeight } });
+presence.state.yaw = initialViewProfile.startYaw;
+presence.state.pitch = initialViewProfile.startPitch;
+const travelInput = { forward: 0, strafe: 0, boost: false };
+const heldKeys = new Set();
 
 let sceneTime = 0;
 let pointerSeen = false;
@@ -901,10 +890,10 @@ function announce(message) {
 let activeRegion = null;
 
 function updateRegionReadout() {
-  const region = regionAt(cameraTarget.x, cameraTarget.z);
+  const region = regionAt(presence.state.x, presence.state.z);
   if (region === activeRegion) return;
   activeRegion = region;
-  if (plateTitle) plateTitle.textContent = region ? `${region.name} · at anchor` : "Manta 01 · in passage";
+  if (plateTitle) plateTitle.textContent = region ? region.name : "Manta 01 · in passage";
   announce(region ? `${region.name}.` : "Open water.");
 }
 
@@ -1126,9 +1115,9 @@ canvas.addEventListener("pointerdown", (event) => {
   if (pointerIsMouse && event.button !== 0 && event.button !== 1 && event.button !== 2) return;
   canvas.focus({ preventScroll: true });
   canvas.setPointerCapture(event.pointerId);
-  const mode = pointerIsMouse && event.altKey ? "pan" : pointerIsMouse && (event.shiftKey || event.button !== 0) ? "orbit" : "fold";
+  const mode = pointerIsMouse && event.altKey ? "look" : "pending";
   markDirectMotion(500);
-  interactivePointers.set(event.pointerId, { x: event.clientX, y: event.clientY, mode });
+  interactivePointers.set(event.pointerId, { x: event.clientX, y: event.clientY, mode, downAt: performance.now() });
   setPointerNdc(event.clientX, event.clientY);
   updateCursor(event.clientX, event.clientY, event.pointerType);
 
@@ -1147,16 +1136,8 @@ canvas.addEventListener("pointerdown", (event) => {
     pointerDownLotus = lotusAtPointer();
     setHoveredLotus(pointerDownLotus);
 
-    if (primaryMode === "fold" && !pointerDownLotus) {
-      const oceanPoint = oceanAtPointer();
-      pointerDownOcean = Boolean(oceanPoint);
-      if (oceanPoint) {
-        const angle = Math.atan2(pointerNdc.y, pointerNdc.x + 0.001);
-        const directionX = Math.cos(angle) * 0.18;
-        const directionZ = Math.sin(angle) * 0.18;
-        activateFoldImpulse(oceanPoint.x + directionX, oceanPoint.z + directionZ, oceanPoint.x, oceanPoint.z, directionX * 2.4, directionZ * 2.4, performance.now());
-      }
-    }
+    foldHoldPointer = event.pointerId;
+    foldHoldDeadline = performance.now() + presenceLimits.foldHoldMs;
   } else if (interactivePointers.size === 2) {
     const iterator = interactivePointers.values();
     const first = iterator.next().value;
@@ -1165,10 +1146,11 @@ canvas.addEventListener("pointerdown", (event) => {
     pinchAngle = Math.atan2(second.y - first.y, second.x - first.x);
     orbitCenterX = (first.x + second.x) * 0.5;
     orbitCenterY = (first.y + second.y) * 0.5;
-    primaryMode = "orbit";
+    primaryMode = "look";
     pinchActive = true;
     gestureHadPinch = true;
     pointerMoved = true;
+    foldHoldPointer = null;
     if (activeFoldStroke) {
       activeFoldStroke.active = false;
       activeFoldStroke.count = 0;
@@ -1196,18 +1178,9 @@ canvas.addEventListener("pointermove", (event) => {
     const second = iterator.next().value;
     const centerX = (first.x + second.x) * 0.5;
     const centerY = (first.y + second.y) * 0.5;
-    const distance = Math.max(18, Math.hypot(first.x - second.x, first.y - second.y));
-    const angle = Math.atan2(second.y - first.y, second.x - first.x);
-    const angleDelta = Math.atan2(Math.sin(angle - pinchAngle), Math.cos(angle - pinchAngle));
-    orbit.targetRadius = clamp(orbit.targetRadius * (pinchDistance / distance), 8.2, maxOrbitRadius);
-    orbit.targetTheta -= angleDelta * 1.15 + (centerX - orbitCenterX) * 0.0032;
-    orbit.targetPhi = clamp(orbit.targetPhi + (centerY - orbitCenterY) * 0.0032, 0.48, 1.39);
-    orbit.thetaVelocity = -angleDelta * 1.8;
-    orbit.radiusVelocity += (pinchDistance - distance) * 0.0008;
+    presence.look((centerX - orbitCenterX) * 0.0034, (centerY - orbitCenterY) * 0.0026);
     orbitCenterX = centerX;
     orbitCenterY = centerY;
-    pinchDistance = distance;
-    pinchAngle = angle;
     pointerMoved = true;
     markDirectMotion(700);
     setHoveredLotus(null);
@@ -1220,22 +1193,18 @@ canvas.addEventListener("pointermove", (event) => {
     const totalX = event.clientX - pointerStartX;
     const totalY = event.clientY - pointerStartY;
     if (totalX * totalX + totalY * totalY > 16) pointerMoved = true;
+    if (pointerMoved && stored.mode === "pending") {
+      stored.mode = "travel";
+      if (primaryPointer === event.pointerId) primaryMode = "travel";
+      foldHoldPointer = null;
+    }
 
-    if (stored.mode === "pan") {
+    if (stored.mode === "travel") {
       markDirectMotion(650);
-      const panScale = orbit.currentRadius * 0.0016;
-      const rightX = Math.cos(orbit.currentTheta);
-      const rightZ = -Math.sin(orbit.currentTheta);
-      const forwardX = Math.sin(orbit.currentTheta);
-      const forwardZ = Math.cos(orbit.currentTheta);
-      panTarget.x = clamp(panTarget.x + (-deltaX * rightX - deltaY * forwardX) * panScale, -10, 10);
-      panTarget.y = clamp(panTarget.y + (-deltaX * rightZ - deltaY * forwardZ) * panScale, -10, 10);
-    } else if (stored.mode === "orbit") {
+      presence.dragTravel(deltaX, deltaY);
+    } else if (stored.mode === "look") {
       markDirectMotion(650);
-      orbit.targetTheta -= deltaX * 0.0052;
-      orbit.targetPhi = clamp(orbit.targetPhi - deltaY * 0.0042, 0.48, 1.39);
-      orbit.thetaVelocity = -deltaX * 0.12;
-      orbit.phiVelocity = -deltaY * 0.1;
+      presence.look(-deltaX * 0.0042, -deltaY * 0.0032);
     } else {
       const eventTime = performance.now();
       if (eventTime - lastFoldRaycastAt < 24) {
@@ -1328,8 +1297,9 @@ function releasePointer(event, cancelled) {
     const remaining = interactivePointers.entries().next().value;
     primaryPointer = remaining[0];
     const point = remaining[1];
-    point.mode = "orbit";
-    primaryMode = "orbit";
+    point.mode = "look";
+    primaryMode = "look";
+    foldHoldPointer = null;
     pointerStartX = point.x;
     pointerStartY = point.y;
     pointerLastX = point.x;
@@ -1359,8 +1329,7 @@ canvas.addEventListener("pointerleave", () => {
 canvas.addEventListener("wheel", (event) => {
   event.preventDefault();
   const zoom = clamp(event.deltaY, -120, 120);
-  orbit.targetRadius = clamp(orbit.targetRadius * Math.exp(zoom * 0.00115), 8.2, maxOrbitRadius);
-  orbit.radiusVelocity += zoom * 0.0008;
+  presence.look(-zoom * 0.0016, 0);
   markDirectMotion(900);
   if (Math.abs(zoom) > 24) scatterCranes(0.45);
   renderDirty = true;
@@ -1368,46 +1337,94 @@ canvas.addEventListener("wheel", (event) => {
 
 canvas.addEventListener("contextmenu", (event) => event.preventDefault());
 
+let foldHoldPointer = null;
+let foldHoldDeadline = 0;
+
+function beginFoldHold() {
+  if (foldHoldPointer === null || performance.now() < foldHoldDeadline) return;
+  const pointerId = foldHoldPointer;
+  foldHoldPointer = null;
+  const stored = interactivePointers.get(pointerId);
+  if (!stored || stored.mode !== "pending" || pointerMoved) return;
+  stored.mode = "fold";
+  if (primaryPointer === pointerId) primaryMode = "fold";
+  if (pointerDownLotus) return;
+  const oceanPoint = oceanAtPointer();
+  pointerDownOcean = Boolean(oceanPoint);
+  if (!oceanPoint) return;
+  const angle = Math.atan2(pointerNdc.y, pointerNdc.x + 0.001);
+  const directionX = Math.cos(angle) * 0.18;
+  const directionZ = Math.sin(angle) * 0.18;
+  activateFoldImpulse(
+    oceanPoint.x + directionX,
+    oceanPoint.z + directionZ,
+    oceanPoint.x,
+    oceanPoint.z,
+    directionX * 2.4,
+    directionZ * 2.4,
+    performance.now()
+  );
+}
+
+const travelKeys = new Set(["w", "a", "s", "d", "shift"]);
+const lookKeys = new Set(["arrowleft", "arrowright", "arrowup", "arrowdown", "q", "e"]);
+const lookRate = 0.0042;
+
+function syncTravelInput() {
+  travelInput.forward = (heldKeys.has("w") ? 1 : 0) - (heldKeys.has("s") ? 1 : 0);
+  travelInput.strafe = (heldKeys.has("d") ? 1 : 0) - (heldKeys.has("a") ? 1 : 0);
+  travelInput.boost = heldKeys.has("shift");
+  if (travelInput.forward !== 0 || travelInput.strafe !== 0) presence.releaseGlide();
+}
+
+function applyLookKeys(delta) {
+  let yawDelta = 0;
+  let pitchDelta = 0;
+  if (heldKeys.has("arrowleft")) yawDelta += 1;
+  if (heldKeys.has("arrowright")) yawDelta -= 1;
+  if (heldKeys.has("arrowup")) pitchDelta -= 1;
+  if (heldKeys.has("arrowdown")) pitchDelta += 1;
+  if (heldKeys.has("q")) pitchDelta -= 1;
+  if (heldKeys.has("e")) pitchDelta += 1;
+  if (yawDelta === 0 && pitchDelta === 0) return;
+  presence.look(yawDelta * lookRate * delta * 60, pitchDelta * lookRate * delta * 60);
+  markDirectMotion(600);
+}
+
 canvas.addEventListener("keydown", (event) => {
   const key = event.key.toLowerCase();
   const toggleKey = key === "b" || key === "enter" || key === " " || key === "m" || key === "r";
-  if (event.ctrlKey || event.metaKey || event.altKey || (event.shiftKey && toggleKey) || (event.repeat && toggleKey)) return;
-  let handled = true;
-  if (key === "arrowleft" || key === "arrowright" || key === "arrowup" || key === "arrowdown" || key === "+" || key === "=" || key === "-" || key === "_" || key === "r") markDirectMotion(1000);
-  const orbitAmount = event.shiftKey ? 0.9 : 0.42;
-  if (key === "w" || key === "a" || key === "s" || key === "d") {
-    markDirectMotion(1000);
-    const panStep = event.shiftKey ? 0.9 : 0.42;
-    const rightX = Math.cos(orbit.currentTheta);
-    const rightZ = -Math.sin(orbit.currentTheta);
-    const forwardX = Math.sin(orbit.currentTheta);
-    const forwardZ = Math.cos(orbit.currentTheta);
-    if (key === "w") {
-      panTarget.x = clamp(panTarget.x + forwardX * panStep, -10, 10);
-      panTarget.y = clamp(panTarget.y + forwardZ * panStep, -10, 10);
-    } else if (key === "s") {
-      panTarget.x = clamp(panTarget.x - forwardX * panStep, -10, 10);
-      panTarget.y = clamp(panTarget.y - forwardZ * panStep, -10, 10);
-    } else if (key === "a") {
-      panTarget.x = clamp(panTarget.x - rightX * panStep, -10, 10);
-      panTarget.y = clamp(panTarget.y - rightZ * panStep, -10, 10);
-    } else {
-      panTarget.x = clamp(panTarget.x + rightX * panStep, -10, 10);
-      panTarget.y = clamp(panTarget.y + rightZ * panStep, -10, 10);
+  if (event.ctrlKey || event.metaKey || event.altKey || (event.shiftKey && toggleKey)) return;
+
+  if (travelKeys.has(key) || lookKeys.has(key)) {
+    if (!event.repeat) {
+      heldKeys.add(key);
+      syncTravelInput();
+      if (travelKeys.has(key)) markDirectMotion(1000);
     }
-  } else if (key === "arrowleft") orbit.targetTheta -= orbitAmount;
-  else if (key === "arrowright") orbit.targetTheta += orbitAmount;
-  else if (key === "arrowup") orbit.targetPhi = clamp(orbit.targetPhi - orbitAmount * 0.65, 0.48, 1.39);
-  else if (key === "arrowdown") orbit.targetPhi = clamp(orbit.targetPhi + orbitAmount * 0.65, 0.48, 1.39);
-  else if (key === "+" || key === "=") orbit.targetRadius = clamp(orbit.targetRadius - 1, 8.2, maxOrbitRadius);
-  else if (key === "-" || key === "_") orbit.targetRadius = clamp(orbit.targetRadius + 1, 8.2, maxOrbitRadius);
-  else if (key === "b") cycleKeyboardLotus();
+    event.preventDefault();
+    return;
+  }
+
+  let handled = true;
+  if (key === "r") markDirectMotion(1000);
+  if (key === "b") cycleKeyboardLotus();
   else if (key === "enter") closeKeyboardLotus();
   else if (event.code === "Space") setPaused(!paused);
   else if (key === "m") setMood(activeMood === "dawn" ? "midnight" : "dawn");
   else if (key === "r") resetScene();
   else handled = false;
   if (handled) event.preventDefault();
+});
+
+canvas.addEventListener("keyup", (event) => {
+  const key = event.key.toLowerCase();
+  if (heldKeys.delete(key)) syncTravelInput();
+});
+
+canvas.addEventListener("blur", () => {
+  heldKeys.clear();
+  syncTravelInput();
 });
 
 for (const button of moodButtons) button.addEventListener("click", () => setMood(button.dataset.mood));
@@ -1420,17 +1437,12 @@ function resize() {
   const nextProfile = viewProfileFor(width, height);
   const profileChanged = nextProfile.category !== viewProfile.category;
   viewProfile = nextProfile;
-  defaultPhi = nextProfile.phi;
-  defaultRadius = nextProfile.radius;
+  presence.limits.hoverHeight = nextProfile.hoverHeight;
   camera.fov = nextProfile.fov;
-  cameraTarget.y = nextProfile.targetY;
   camera.aspect = width / height;
   camera.updateProjectionMatrix();
   if (profileChanged) {
-    orbit.targetPhi = nextProfile.phi;
-    orbit.targetRadius = clamp(nextProfile.radius, 8.2, maxOrbitRadius);
-    orbit.phiVelocity = 0;
-    orbit.radiusVelocity = 0;
+    presence.state.pitch = nextProfile.startPitch;
     markDirectMotion(1200);
     applyHarnessPose();
   }
@@ -1474,9 +1486,8 @@ document.addEventListener("visibilitychange", () => {
     refreshLotusCursor();
     lastHoverTest = -10;
     lastFoldRaycastAt = -10;
-    orbit.thetaVelocity = 0;
-    orbit.phiVelocity = 0;
-    orbit.radiusVelocity = 0;
+    heldKeys.clear();
+    syncTravelInput();
     directMotionUntil = 0;
   }
   lastFrameTime = performance.now();
@@ -1499,38 +1510,22 @@ canvas.addEventListener("webglcontextrestored", () => {
 let cameraInitialized = false;
 
 function updateCamera(delta) {
-  if (!primaryPointer && !pinchActive) {
-    orbit.targetTheta += orbit.thetaVelocity * delta;
-    orbit.targetPhi = clamp(orbit.targetPhi + orbit.phiVelocity * delta, 0.48, 1.39);
-    orbit.targetRadius = clamp(orbit.targetRadius + orbit.radiusVelocity * delta, 8.2, maxOrbitRadius);
-    const inertia = Math.exp(-4.2 * delta);
-    orbit.thetaVelocity *= inertia;
-    orbit.phiVelocity *= inertia;
-    orbit.radiusVelocity *= inertia;
-  } else {
-    orbit.thetaVelocity *= 0.7;
-    orbit.phiVelocity *= 0.7;
-    orbit.radiusVelocity *= 0.7;
-  }
+  presence.update(delta, {
+    forward: travelInput.forward,
+    strafe: travelInput.strafe,
+    boost: travelInput.boost,
+    pointerNdcX: pointerSeen ? pointerNdc.x : 0
+  });
 
-  const cameraDamping = reducedMotion ? 13 : 7.5;
-  orbit.currentTheta = damp(orbit.currentTheta, orbit.targetTheta, cameraDamping, delta);
-  orbit.currentPhi = damp(orbit.currentPhi, orbit.targetPhi, cameraDamping, delta);
-  orbit.currentRadius = damp(orbit.currentRadius, orbit.targetRadius, cameraDamping, delta);
-  panCurrent.x = damp(panCurrent.x, panTarget.x, 3.2, delta);
-  panCurrent.y = damp(panCurrent.y, panTarget.y, 3.2, delta);
-  cameraTarget.x = panCurrent.x;
-  cameraTarget.z = panCurrent.y;
-  const sinPhi = Math.sin(orbit.currentPhi);
-  camera.position.set(
-    cameraTarget.x + Math.sin(orbit.currentTheta) * sinPhi * orbit.currentRadius,
-    cameraTarget.y + Math.cos(orbit.currentPhi) * orbit.currentRadius,
-    cameraTarget.z + Math.cos(orbit.currentTheta) * sinPhi * orbit.currentRadius
-  );
-  pushOutOfLandmarks(camera.position.x, camera.position.z, camera.position.y, landmarkMetrics, cameraPush);
-  camera.position.x = cameraPush.x;
-  camera.position.z = cameraPush.z;
-  camera.lookAt(cameraTarget);
+  pushOutOfLandmarks(presence.state.x, presence.state.z, presence.state.y, landmarkMetrics, cameraPush);
+  presence.state.x = cameraPush.x;
+  presence.state.z = cameraPush.z;
+
+  camera.position.set(presence.state.x, presence.state.y, presence.state.z);
+  camera.rotation.set(0, 0, 0);
+  camera.rotation.order = "YXZ";
+  camera.rotation.y = presence.state.yaw;
+  camera.rotation.x = presence.state.pitch;
 
   if (!cameraInitialized) {
     previousCameraPosition.copy(camera.position);
@@ -1639,19 +1634,11 @@ function clearCreaseMemory() {
 
 function resetScene() {
   clearCreaseMemory();
-  orbit.currentTheta = 0.64;
-  orbit.currentPhi = defaultPhi;
-  orbit.currentRadius = defaultRadius;
-  orbit.targetTheta = 0.64;
-  orbit.targetPhi = defaultPhi;
-  orbit.targetRadius = defaultRadius;
-  orbit.thetaVelocity = 0;
-  orbit.phiVelocity = 0;
-  orbit.radiusVelocity = 0;
-  panTarget.set(0, 0);
-  panCurrent.set(0, 0);
-  cameraTarget.x = 0;
-  cameraTarget.z = 0;
+  presence.reset();
+  presence.state.yaw = viewProfile.startYaw;
+  presence.state.pitch = viewProfile.startPitch;
+  heldKeys.clear();
+  syncTravelInput();
   cameraSpeed = 0;
   cameraInitialized = false;
   applyHarnessPose();
@@ -1869,6 +1856,8 @@ function animate() {
   const directDelta = directActive ? Math.min(rawDelta, 0.033) : 0;
   const sceneDelta = paused ? directDelta : Math.min(rawDelta, 0.033);
   if (!paused) sceneTime += sceneDelta;
+  beginFoldHold();
+  applyLookKeys(sceneDelta);
   updateCamera(sceneDelta);
   updateCreaseSystem(sceneDelta);
   oceanWorld.update(sceneDelta, { reducedMotion, motionEnergy, sceneTime });
@@ -1878,7 +1867,7 @@ function animate() {
   if (!paused) {
     islandWorld.update(sceneTime, reducedMotion ? 0.1 : 1 + motionEnergy * 0.35);
     landmarks.update(sceneTime, reducedMotion ? 0.12 : 1 + motionEnergy * 0.3);
-    horizon.update(sceneTime, orbit.currentTheta);
+    horizon.update(sceneTime, presence.state.yaw);
     backdrop.update(sceneTime);
     atmosphere.update(sceneTime, { reducedMotion, motionEnergy, foldEnergy });
   }
@@ -1893,7 +1882,7 @@ function animate() {
   renderer.render(scene, camera);
   if (statsPanel) {
     statsPanel.sample(renderer.info, quality.dpr);
-    statsPanel.setCamera(orbit.currentPhi, orbit.currentRadius, orbit.currentTheta);
+    statsPanel.setPresence(presence.state);
     statsPanel.update(frameMilliseconds);
   }
   renderDirty = moodTransitioning || (paused && directActive);
@@ -1908,17 +1897,12 @@ const harness = readHarnessParams(window.location.search);
 const statsPanel = harness.stats ? createStatsPanel(document) : null;
 
 function applyHarnessPose() {
-  if (harness.pose) {
-    const preset = posePresets[harness.pose];
-    panTarget.set(preset.x, preset.z);
-    panCurrent.set(preset.x, preset.z);
-    cameraTarget.x = preset.x;
-    cameraTarget.z = preset.z;
-    orbit.targetRadius = orbit.currentRadius = clamp(preset.radius, 8.2, maxOrbitRadius);
+  if (harness.at) {
+    presence.moveTo(clamp(harness.at.x, -presenceLimits.playableRadius, presenceLimits.playableRadius), clamp(harness.at.z, -presenceLimits.playableRadius, presenceLimits.playableRadius));
   }
-  if (harness.theta !== null) orbit.targetTheta = orbit.currentTheta = harness.theta;
-  if (harness.phi !== null) orbit.targetPhi = orbit.currentPhi = clamp(harness.phi, 0.48, 1.39);
-  if (harness.radius !== null) orbit.targetRadius = orbit.currentRadius = clamp(harness.radius, 8.2, maxOrbitRadius);
+  if (harness.yaw !== null) presence.state.yaw = harness.yaw;
+  if (harness.pitch !== null) presence.state.pitch = clamp(harness.pitch, presenceLimits.minPitch, presenceLimits.maxPitch);
+  if (harness.speed !== null) presence.limits.cruiseSpeed = clamp(harness.speed, 0.5, 24);
   if (harness.mood) setMood(harness.mood, false);
   if (statsPanel) {
     const parts = [];

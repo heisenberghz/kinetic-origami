@@ -33,7 +33,8 @@ const requiredSystems = {
   backdrop: ["horizon", "backdrop"],
   foregroundSails: ["foregroundSails", "sailGeometry"],
   creaseLines: ["creaseLines", "creaseLineGeometry", "creaseLineMaterial", "creaseStrokes", "creaseCursor"],
-  ocean: ["oceanWorld", "ocean", "oceanMaterial"]
+  ocean: ["oceanWorld", "ocean", "oceanMaterial"],
+  presence: ["presence", "travelInput", "heldKeys", "foldHoldPointer", "beginFoldHold", "applyLookKeys", "syncTravelInput"]
 };
 
 test("every world system still declares its scene objects", () => {
@@ -84,8 +85,21 @@ test("the crease field is cleared before strokes are stamped into it", () => {
   assert.ok(stampIndex < relaxIndex, "strokes are stamped after relaxation, so they take effect a frame late");
 });
 
+test("the orbit camera is gone and cannot creep back", () => {
+  const removed = ["orbit.target", "orbit.current", "orbit.thetaVelocity", "orbit.phiVelocity", "orbit.radiusVelocity", "panTarget", "panCurrent", "cameraTarget", "maxOrbitRadius", "defaultPhi", "defaultRadius"];
+  for (const name of removed) {
+    assert.ok(!mainSource.includes(name), `${name} is an orbit-era symbol that Track 4 removed, but main.js still uses it`);
+  }
+});
+
+test("main.js drives the camera from presence state every frame", () => {
+  assert.match(mainSource, /camera\.position\.set\(presence\.state\.x, presence\.state\.y, presence\.state\.z\)/, "the camera must read its position from the presence");
+  assert.match(mainSource, /camera\.rotation\.y = presence\.state\.yaw/, "the camera must face the presence yaw");
+  assert.match(mainSource, /camera\.rotation\.x = presence\.state\.pitch/, "the camera must use the presence pitch");
+});
+
 test("every extracted world module is imported by main.js", () => {
-  const modules = ["atmosphere", "backdrop", "harness", "horizon", "islands", "landmarks", "layout", "migration", "ocean"];
+  const modules = ["atmosphere", "backdrop", "harness", "horizon", "islands", "landmarks", "layout", "migration", "ocean", "presence"];
   for (const name of modules) {
     assert.match(mainSource, new RegExp(`from "\\./world/${name}\\.js"`), `main.js never imports world/${name}.js`);
   }
