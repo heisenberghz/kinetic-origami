@@ -158,6 +158,7 @@ presence.state.yaw = initialViewProfile.startYaw;
 presence.state.pitch = initialViewProfile.startPitch;
 const travelInput = { forward: 0, strafe: 0, boost: false };
 const heldKeys = new Set();
+let steeringPointerDelta = 0;
 
 let sceneTime = 0;
 let pointerSeen = false;
@@ -1069,8 +1070,12 @@ function setPaused(nextPaused, shouldAnnounce = true) {
 
 function setPointerNdc(clientX, clientY) {
   const bounds = canvas.getBoundingClientRect();
-  pointerNdc.x = (clientX - bounds.left) / bounds.width * 2 - 1;
+  const nextX = (clientX - bounds.left) / bounds.width * 2 - 1;
   pointerNdc.y = -(clientY - bounds.top) / bounds.height * 2 + 1;
+  if (pointerSeen && primaryPointer === null) {
+    steeringPointerDelta += nextX - pointerNdc.x;
+  }
+  pointerNdc.x = nextX;
   pointerSeen = true;
 }
 
@@ -1514,8 +1519,9 @@ function updateCamera(delta) {
     forward: travelInput.forward,
     strafe: travelInput.strafe,
     boost: travelInput.boost,
-    pointerNdcX: pointerSeen ? pointerNdc.x : 0
+    pointerDeltaX: steeringPointerDelta
   });
+  steeringPointerDelta = 0;
 
   pushOutOfLandmarks(presence.state.x, presence.state.z, presence.state.y, landmarkMetrics, cameraPush);
   presence.state.x = cameraPush.x;

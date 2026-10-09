@@ -33,17 +33,48 @@ test("holding forward accelerates to cruise and coasts to a stop", () => {
   assert.ok(stopped < 0.05, `the presence never settled, still drifting at ${stopped.toFixed(3)}`);
 });
 
-test("the presence travels in the direction it faces", () => {
+test("holding forward moves the presence the way the camera is actually looking", () => {
   const presence = createPresence();
   presence.state.yaw = 0;
   run(presence, 4, { forward: 1 });
-  assert.ok(presence.state.z > 5, `facing yaw 0 should travel toward +z, moved to ${presence.state.z.toFixed(2)}`);
-  assert.ok(Math.abs(presence.state.x) < 1.5, `drifted sideways to x=${presence.state.x.toFixed(2)} while facing +z`);
+  assert.ok(presence.state.z < -5, `facing yaw 0 means looking down -z, but forward moved to z=${presence.state.z.toFixed(2)}`);
+  assert.ok(Math.abs(presence.state.x) < 1.5, `drifted sideways to x=${presence.state.x.toFixed(2)} while facing -z`);
 
   const turned = createPresence();
   turned.state.yaw = Math.PI / 2;
   run(turned, 4, { forward: 1 });
-  assert.ok(turned.state.x > 5, `facing yaw 90 should travel toward +x, moved to ${turned.state.x.toFixed(2)}`);
+  assert.ok(turned.state.x < -5, `facing yaw 90 means looking down -x, but forward moved to x=${turned.state.x.toFixed(2)}`);
+});
+
+test("holding back moves away from the view, and strafing moves sideways", () => {
+  const back = createPresence();
+  back.state.yaw = 0;
+  run(back, 4, { forward: -1 });
+  assert.ok(back.state.z > 5, `holding back from yaw 0 should move toward +z, moved to ${back.state.z.toFixed(2)}`);
+
+  const right = createPresence();
+  right.state.yaw = 0;
+  run(right, 4, { strafe: 1 });
+  assert.ok(right.state.x > 3, `strafing right at yaw 0 should move toward +x, moved to ${right.state.x.toFixed(2)}`);
+
+  const left = createPresence();
+  left.state.yaw = 0;
+  run(left, 4, { strafe: -1 });
+  assert.ok(left.state.x < -3, `strafing left at yaw 0 should move toward -x, moved to ${left.state.x.toFixed(2)}`);
+});
+
+test("forward travel always matches the camera heading, at every angle", () => {
+  for (const yaw of [0, Math.PI / 6, Math.PI / 3, Math.PI / 2, Math.PI, (3 * Math.PI) / 2, -1.1, 2.4]) {
+    const presence = createPresence();
+    presence.state.yaw = yaw;
+    run(presence, 3, { forward: 1 });
+    const headingX = -Math.sin(yaw);
+    const headingZ = -Math.cos(yaw);
+    const speed = Math.hypot(presence.state.velocityX, presence.state.velocityZ);
+    assert.ok(speed > 0.5, `at yaw ${yaw.toFixed(2)} the presence barely moved`);
+    const alignment = (presence.state.velocityX * headingX + presence.state.velocityZ * headingZ) / speed;
+    assert.ok(alignment > 0.99, `at yaw ${yaw.toFixed(2)} forward travel was only ${alignment.toFixed(3)} aligned with the view direction`);
+  }
 });
 
 test("a 20 to 30 second crossing actually takes 20 to 30 seconds", () => {
@@ -72,19 +103,35 @@ test("the presence cannot leave the playable area", () => {
   assert.ok(Math.hypot(presence.state.x, presence.state.z) <= presenceLimits.playableRadius + 0.001, "pushing harder walked straight through the boundary");
 });
 
-test("steering from the pointer turns the presence without teleporting it", () => {
+test("steering from pointer movement turns the presence without teleporting it", () => {
   const presence = createPresence();
   const before = Math.hypot(presence.state.x, presence.state.z);
-  run(presence, 2, { pointerNdcX: 1 });
+  run(presence, 2, { pointerDeltaX: 0.4 });
   const after = Math.hypot(presence.state.x, presence.state.z);
-  assert.ok(Math.abs(presence.state.yaw) > 0.05, "the presence ignored the pointer");
+  assert.ok(Math.abs(presence.state.yaw) > 0.05, "the presence ignored the pointer movement");
   assert.ok(after < before + 0.01, "steering moved the presence, but steering should only turn it");
 });
 
-test("the steering deadzone keeps the presence still when the pointer is centred", () => {
+test("a stationary cursor cannot spin the presence forever", () => {
   const presence = createPresence();
-  run(presence, 2, { pointerNdcX: 0.05 });
-  assert.ok(Math.abs(presence.state.yaw) < 0.001, `the presence turned ${presence.state.yaw} from a near-centred pointer`);
+  for (let frame = 0; frame < 1800; frame += 1) presence.update(1 / 60, {});
+  assert.equal(presence.state.yaw, 0, "the presence rotated on its own with no pointer input");
+});
+
+test("the presence turns toward the direction the cursor moves", () => {
+  const rightward = createPresence();
+  rightward.update(1 / 60, { pointerDeltaX: 0.5 });
+  assert.ok(rightward.state.yaw > 0, `moving the cursor right should turn right, yaw went to ${rightward.state.yaw}`);
+
+  const leftward = createPresence();
+  leftward.update(1 / 60, { pointerDeltaX: -0.5 });
+  assert.ok(leftward.state.yaw < 0, `moving the cursor left should turn left, yaw went to ${leftward.state.yaw}`);
+});
+
+test("tiny pointer jitter inside the deadzone is ignored", () => {
+  const presence = createPresence();
+  run(presence, 2, { pointerDeltaX: 0.0008 });
+  assert.ok(Math.abs(presence.state.yaw) < 0.001, `the presence turned ${presence.state.yaw} from cursor jitter`);
 });
 
 test("pitch is clamped so the horizon cannot flip", () => {

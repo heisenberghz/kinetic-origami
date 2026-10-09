@@ -6,8 +6,8 @@ export const presenceLimits = {
   boostMultiplier: 2.15,
   acceleration: 3.4,
   damping: 2.6,
-  steeringGain: 1.35,
-  steeringDeadzone: 0.14,
+  steeringGain: 2.4,
+  steeringDeadzone: 0.0022,
   playableRadius: 58,
   bobHeight: 0.075,
   bobRate: 0.62,
@@ -44,11 +44,11 @@ export function createPresence(options = {}) {
   };
 
   function forwardX() {
-    return Math.sin(state.yaw);
+    return -Math.sin(state.yaw);
   }
 
   function forwardZ() {
-    return Math.cos(state.yaw);
+    return -Math.cos(state.yaw);
   }
 
   function rightX() {
@@ -103,12 +103,12 @@ export function createPresence(options = {}) {
     }
   }
 
-  function steerFromPointer(pointerNdcX, delta) {
+  function steerFromPointer(pointerDeltaX, delta) {
     if (state.gliding) return 0;
-    const magnitude = Math.abs(pointerNdcX);
-    if (magnitude < limits.steeringDeadzone) return 0;
-    const strength = (magnitude - limits.steeringDeadzone) / (1 - limits.steeringDeadzone);
-    return Math.sign(pointerNdcX) * strength * limits.steeringGain * delta;
+    if (!Number.isFinite(pointerDeltaX)) return 0;
+    if (Math.abs(pointerDeltaX) < limits.steeringDeadzone) return 0;
+    const strength = (Math.abs(pointerDeltaX) - limits.steeringDeadzone) / (1 - limits.steeringDeadzone);
+    return Math.sign(pointerDeltaX) * strength * limits.steeringGain * delta;
   }
 
   function look(dYaw, dPitch) {
@@ -143,7 +143,7 @@ export function createPresence(options = {}) {
   }
 
   function update(delta, input = {}) {
-    const steer = steerFromPointer(input.pointerNdcX || 0, delta);
+    const steer = steerFromPointer(input.pointerDeltaX || 0, delta);
     if (steer !== 0) state.yaw = wrapAngle(state.yaw + steer);
 
     applyTravel({ forward: input.forward || 0, strafe: input.strafe || 0, boost: input.boost }, delta);
