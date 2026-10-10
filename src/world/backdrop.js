@@ -1,6 +1,6 @@
 const TAU = Math.PI * 2;
 
-export const backdropRadii = [28.5, 32, 35.5];
+export const backdropRadii = [82, 88, 94];
 
 const ringSpecs = [
   {
@@ -8,8 +8,8 @@ const ringSpecs = [
     night: "#132530",
     drift: 0.0042,
     bands: [
-      { radius: 28.5, crest: 4.6, phase: 0.4, segments: 132 },
-      { radius: 30.4, crest: 3.1, phase: 2.6, segments: 116 }
+      { radius: 82, crest: 9.4, phase: 0.4, segments: 132 },
+      { radius: 85.5, crest: 6.6, phase: 2.6, segments: 116 }
     ]
   },
   {
@@ -17,8 +17,8 @@ const ringSpecs = [
     night: "#10232f",
     drift: -0.0026,
     bands: [
-      { radius: 32, crest: 6.4, phase: 1.9, segments: 124 },
-      { radius: 33.9, crest: 4.2, phase: 4.2, segments: 104 }
+      { radius: 88, crest: 13.2, phase: 1.9, segments: 124 },
+      { radius: 91.5, crest: 8.8, phase: 4.2, segments: 104 }
     ]
   },
   {
@@ -26,8 +26,8 @@ const ringSpecs = [
     night: "#0f212e",
     drift: 0.0015,
     bands: [
-      { radius: 35.5, crest: 8.4, phase: 3.3, segments: 116 },
-      { radius: 37.3, crest: 5.4, phase: 5.7, segments: 96 }
+      { radius: 94, crest: 17.6, phase: 3.3, segments: 116 },
+      { radius: 97.5, crest: 11.4, phase: 5.7, segments: 96 }
     ]
   }
 ];

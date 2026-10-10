@@ -1,7 +1,7 @@
 export const travelPresets = {
-  cathedral: { x: -4, z: -5.4, yaw: 0 },
-  lagoon: { x: -9.6, z: 7.6, yaw: Math.PI },
-  shoals: { x: 8.6, z: 6.8, yaw: Math.PI },
+  cathedral: { x: -14, z: -14.6, yaw: 0 },
+  lagoon: { x: -30, z: 11.6, yaw: 0 },
+  shoals: { x: 28, z: 12.6, yaw: Math.PI },
   open: { x: 0, z: 0, yaw: 0.5 }
 };
 

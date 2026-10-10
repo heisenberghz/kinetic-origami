@@ -114,7 +114,7 @@ test("lotuses do not overlap each other", () => {
   }
 });
 
-test("no content spawns inside the default camera shell", () => {
+test("all content sits inside the playable area", () => {
   const reachOf = (x, z, radius) => distance(x, z, 0, 0) + radius;
   const reaches = [
     ...islandSpecs.map(([x, z, scale]) => ({ kind: "island", reach: reachOf(x, z, planRadii.island * scale) })),
@@ -124,8 +124,8 @@ test("no content spawns inside the default camera shell", () => {
   ];
   const outermost = reaches.reduce((worst, entry) => (entry.reach > worst.reach ? entry : worst));
   assert.ok(
-    outermost.reach < cameraLimits.smallestDefaultRadius,
-    `${outermost.kind} reaches ${outermost.reach.toFixed(2)}, inside the smallest default camera radius of ${cameraLimits.smallestDefaultRadius}`
+    outermost.reach <= cameraLimits.playableRadius,
+    `${outermost.kind} reaches ${outermost.reach.toFixed(2)}, past the ${cameraLimits.playableRadius} playable radius, so the presence can walk into it`
   );
 });
 
@@ -139,19 +139,15 @@ test("all content stays inside the ocean", () => {
   }
 });
 
-test("backdrop ridges sit beyond the camera's furthest reach", () => {
-  for (const radius of backdropRadii) {
-    assert.ok(
-      radius > cameraLimits.maxZoomRadius,
-      `backdrop ridge at radius ${radius} is inside max zoom radius ${cameraLimits.maxZoomRadius}, so the camera can fly into it`
-    );
-  }
-});
-
 test("backdrop ridges stay outside the ocean so they break its silhouette", () => {
   for (const radius of backdropRadii) {
     assert.ok(radius > cameraLimits.oceanRadius, `backdrop ridge at ${radius} sits inside the ocean disc`);
   }
+});
+
+test("the backdrop ridges are ordered so the far ones rise above the near ones", () => {
+  const sorted = [...backdropRadii].sort((a, b) => a - b);
+  assert.deepEqual(backdropRadii, sorted, `backdrop radii should read near to far, got ${backdropRadii.join(", ")}`);
 });
 
 test("every landmark keeps satellites and cranes overhead", () => {

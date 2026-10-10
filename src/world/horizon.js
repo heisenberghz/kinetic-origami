@@ -1,13 +1,13 @@
 import { cameraLimits } from "./layout.js";
 
 export const horizonLayerSpecs = [
-  { day: "#5c5346", night: "#263f4d", opacity: 0.2, z: -12.5, height: 4, phase: 0.7, parallax: 0.45 },
-  { day: "#7a6d5b", night: "#1e3544", opacity: 0.17, z: -15, height: 5.2, phase: 2.1, parallax: 0.8 },
-  { day: "#9a8d76", night: "#182c3b", opacity: 0.14, z: -17.5, height: 6.4, phase: 4.3, parallax: 1.2 }
+  { day: "#5c5346", night: "#263f4d", opacity: 0.2, distance: 62, height: 7.4, phase: 0.7, parallax: 0.45 },
+  { day: "#7a6d5b", night: "#1e3544", opacity: 0.17, distance: 72, height: 9.6, phase: 2.1, parallax: 0.8 },
+  { day: "#9a8d76", night: "#182c3b", opacity: 0.14, distance: 80, height: 12.2, phase: 4.3, parallax: 1.2 }
 ];
 
-const FOG_NEAR = 14;
-const FOG_FAR = 46;
+const FOG_NEAR = 56;
+const FOG_FAR = 96;
 
 function smoothstep(edge0, edge1, value) {
   const t = Math.max(0, Math.min(1, (value - edge0) / (edge1 - edge0)));
@@ -15,12 +15,13 @@ function smoothstep(edge0, edge1, value) {
 }
 
 export function layerVisibility(spec, camera) {
-  const distance = Math.hypot(camera.x, camera.y - spec.height * 0.5, camera.z - spec.z);
+  const rise = Math.max(0, camera.y ?? 0) * 0.45;
+  const distance = spec.distance + rise;
   return spec.opacity * (1 - smoothstep(FOG_NEAR, FOG_FAR, distance));
 }
 
 export function createHorizon({ THREE, scene, moods }) {
-  const geometry = new THREE.CircleGeometry(52, 96);
+  const geometry = new THREE.CircleGeometry(140, 96);
   geometry.rotateX(-Math.PI / 2);
   const material = new THREE.ShaderMaterial({
     uniforms: {
@@ -38,7 +39,7 @@ uniform vec3 uFar;
 uniform float uOpacity;
 varying float vRadius;
 void main(){
-float inner=1.0-smoothstep(14.0,34.0,vRadius);
+float inner=1.0-smoothstep(34.0,86.0,vRadius);
 vec3 color=mix(uFar,uNear,inner);
 gl_FragColor=vec4(color,inner*uOpacity);
 }`,
@@ -56,9 +57,9 @@ gl_FragColor=vec4(color,inner*uOpacity);
 
   const layers = [];
 
-  function addLayer(dayColor, nightColor, opacity, z, height, phase, parallax) {
+  function addLayer(dayColor, nightColor, opacity, distance, height, phase, parallax) {
     const segments = 84;
-    const width = 92;
+    const width = distance * 2.4;
     const positions = [];
     const fades = [];
     const indices = [];
@@ -67,7 +68,7 @@ gl_FragColor=vec4(color,inner*uOpacity);
       const u = index / segments;
       const x = -width * 0.5 + width * u;
       const ridge = height * (0.42 + Math.sin(u * 37.62 + phase) * 0.18 + Math.sin(u * 13.86 - phase) * 0.12);
-      positions.push(x, -1.6, 0, x, -0.15, 0, x, ridge, 0);
+      positions.push(x, -1.6 - height * 0.2, 0, x, -0.15, 0, x, ridge, 0);
       fades.push(0, 1, 1);
       if (index < segments) {
         const current = index * 3;
@@ -80,8 +81,7 @@ gl_FragColor=vec4(color,inner*uOpacity);
     const layerGeometry = new THREE.BufferGeometry();
     layerGeometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
     layerGeometry.setAttribute("aFade", new THREE.Float32BufferAttribute(fades, 1));
-    layerGeometry.setIndex(indices);
-    const layerMaterial = new THREE.MeshBasicMaterial({ color: dayColor, transparent: true, opacity, depthWrite: false, side: THREE.DoubleSide, fog: true });
+    layerGeometry.setIndex(indices);    const layerMaterial = new THREE.MeshBasicMaterial({ color: dayColor, transparent: true, opacity, depthWrite: false, side: THREE.DoubleSide, fog: true });
     layerMaterial.forceSinglePass = true;
     layerMaterial.onBeforeCompile = (shader) => {
       shader.vertexShader = shader.vertexShader
@@ -93,15 +93,14 @@ gl_FragColor=vec4(color,inner*uOpacity);
     };
     layerMaterial.customProgramCacheKey = () => "horizon-base-fade";
     const mesh = new THREE.Mesh(layerGeometry, layerMaterial);
-    mesh.position.set(0, -0.32, z);
     mesh.renderOrder = -1;
     mesh.frustumCulled = false;
     scene.add(mesh);
-    layers.push({ mesh, material: layerMaterial, day: new THREE.Color(dayColor), night: new THREE.Color(nightColor), baseX: 0, baseY: -0.32, phase, parallax });
+    layers.push({ mesh, material: layerMaterial, day: new THREE.Color(dayColor), night: new THREE.Color(nightColor), baseY: -0.32, phase, parallax, distance });
   }
 
   for (const spec of horizonLayerSpecs) {
-    addLayer(spec.day, spec.night, spec.opacity, spec.z, spec.height, spec.phase, spec.parallax);
+    addLayer(spec.day, spec.night, spec.opacity, spec.distance, spec.height, spec.phase, spec.parallax);
   }
 
   function applyMood(activeMood, blend) {
@@ -113,11 +112,21 @@ gl_FragColor=vec4(color,inner*uOpacity);
     }
   }
 
-  function update(sceneTime, theta) {
+  function update(sceneTime, presence) {
+    const x = presence.x;
+    const z = presence.z;
+    const headingX = -Math.sin(presence.yaw);
+    const headingZ = -Math.cos(presence.yaw);
+    paper.position.x = x;
+    paper.position.z = z;
     for (let index = 0; index < layers.length; index += 1) {
       const layer = layers[index];
-      layer.mesh.position.x = layer.baseX - theta * layer.parallax + Math.sin(sceneTime * 0.018 + layer.phase) * 0.16;
+      const wobble = Math.sin(sceneTime * 0.018 + layer.phase) * 1.4;
+      const push = layer.distance + wobble;
+      layer.mesh.position.x = x + headingX * push - headingZ * layer.parallax * Math.sin(sceneTime * 0.01 + layer.phase);
+      layer.mesh.position.z = z + headingZ * push + headingX * layer.parallax * Math.sin(sceneTime * 0.01 + layer.phase);
       layer.mesh.position.y = layer.baseY + Math.sin(sceneTime * 0.07 + layer.phase) * 0.035;
+      layer.mesh.rotation.y = presence.yaw;
     }
   }
 

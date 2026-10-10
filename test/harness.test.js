@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { regions } from "../src/world/layout.js";
 import { presenceLimits } from "../src/world/presence.js";
-import { readHarnessParams, createStatsPanel } from "../src/world/harness.js";
+import { readHarnessParams, travelPresets, createStatsPanel } from "../src/world/harness.js";
 
 test("harness ignores unknown or malformed params instead of breaking the boot", () => {
   const empty = readHarnessParams("");
@@ -100,6 +100,22 @@ test("the stats panel never leaves the document when the presence moves", () => 
   }
   assert.match(stubElement.textContent, /midnight/);
   assert.match(stubElement.textContent, /draws {2}79/);
+});
+
+test("every district has a travel vantage point that faces it from a clear spot", () => {
+  for (const region of regions) {
+    const vantage = travelPresets[region.id];
+    assert.ok(vantage, `district "${region.id}" has no travel preset`);
+    assert.ok(
+      Math.hypot(vantage.x, vantage.z) <= presenceLimits.playableRadius,
+      `the "${region.id}" vantage sits outside the playable area`
+    );
+    const gap = Math.hypot(vantage.x - region.x, vantage.z - region.z);
+    assert.ok(gap > 2, `the "${region.id}" vantage stands inside the district`);
+    const heading = Math.atan2(-(region.x - vantage.x), -(region.z - vantage.z));
+    const facingError = Math.abs(Math.atan2(Math.sin(heading - vantage.yaw), Math.cos(heading - vantage.yaw)));
+    assert.ok(facingError < 0.5, `the "${region.id}" preset does not face the district, off by ${facingError.toFixed(2)} radians`);
+  }
 });
 
 test("a harness position inside the playable area is accepted as given", () => {

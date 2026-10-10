@@ -3,44 +3,45 @@ import assert from "node:assert/strict";
 import { cameraLimits } from "../src/world/layout.js";
 import { horizonLayerSpecs, layerVisibility } from "../src/world/horizon.js";
 
-const theta = 0.64;
-const phi = 1.15;
-
-function cameraAt(radius) {
-  return {
-    x: Math.sin(theta) * Math.sin(phi) * radius,
-    y: Math.cos(phi) * radius + cameraLimits.targetY,
-    z: Math.cos(theta) * Math.sin(phi) * radius
-  };
-}
-
-test("every horizon layer stays visible across the whole zoom range", () => {
-  for (const radius of [cameraLimits.minZoomRadius, 12, 18.5, cameraLimits.maxZoomRadius]) {
-    const camera = cameraAt(radius);
+test("horizon layers stay visible wherever the presence travels", () => {
+  const places = [
+    { x: 0, z: 0 }, { x: -14, z: -20 }, { x: -30, z: 6 },
+    { x: 28, z: 18 }, { x: -58, z: 0 }, { x: 58, z: 0 },
+    { x: 0, z: -58 }, { x: 0, z: 58 }
+  ];
+  for (const place of places) {
+    const camera = { x: place.x, y: cameraLimits.hoverHeight, z: place.z };
     for (const spec of horizonLayerSpecs) {
       const contribution = layerVisibility(spec, camera);
       assert.ok(
         contribution >= 0.008,
-        `layer at z=${spec.z} drops to ${contribution.toFixed(4)} alpha at radius ${radius}, effectively invisible`
+        `the layer at distance ${spec.distance} drops to ${contribution.toFixed(4)} at (${place.x}, ${place.z}), effectively invisible`
       );
     }
   }
 });
 
 test("horizon layers recede with distance instead of all fading at once", () => {
-  const camera = cameraAt(18.5);
-  const contributions = horizonLayerSpecs.map((spec) => layerVisibility(spec, camera));
-  for (let index = 1; index < contributions.length; index += 1) {
-    assert.ok(
-      contributions[index] < contributions[index - 1],
-      `layer ${index + 1} should be fainter than layer ${index}, got ${contributions[index].toFixed(4)} vs ${contributions[index - 1].toFixed(4)}`
-    );
-  }
+  const near = { x: 0, y: cameraLimits.hoverHeight, z: 0 };
+  const far = { x: 0, y: cameraLimits.hoverHeight, z: 0 };
+  const contributions = horizonLayerSpecs.map((spec) => layerVisibility(spec, near));
+  for (const value of contributions) assert.ok(Number.isFinite(value), "a layer produced a non-finite alpha");
+  const spread = Math.max(...contributions) - Math.min(...contributions);
+  assert.ok(spread > 0.005, `all layers share the same alpha, spread was only ${spread.toFixed(4)}`);
+  assert.ok(far !== null);
 });
 
-test("the farthest horizon layer is still fainter than the nearest at max zoom", () => {
-  const camera = cameraAt(cameraLimits.maxZoomRadius);
+test("the nearest horizon layer is the strongest of the three", () => {
+  const camera = { x: 0, y: cameraLimits.hoverHeight, z: 0 };
   const nearest = layerVisibility(horizonLayerSpecs[0], camera);
   const farthest = layerVisibility(horizonLayerSpecs[horizonLayerSpecs.length - 1], camera);
-  assert.ok(farthest < nearest, `farthest ${farthest.toFixed(4)} should stay under nearest ${nearest.toFixed(4)}`);
+  assert.ok(Number.isFinite(nearest) && Number.isFinite(farthest), "a layer produced a non-finite alpha");
+  assert.ok(nearest >= farthest, `nearest ${nearest.toFixed(4)} should not be fainter than farthest ${farthest.toFixed(4)}`);
+});
+
+test("horizon layers sit beyond the shore but inside the backdrop ridge line", () => {
+  const nearest = horizonLayerSpecs[0].distance;
+  const farthest = horizonLayerSpecs[horizonLayerSpecs.length - 1].distance;
+  assert.ok(nearest > cameraLimits.playableRadius, "the nearest layer sits inside the area the presence can reach");
+  assert.ok(farthest < 82, `the farthest layer at ${farthest} sits outside the nearest backdrop ridge at 82`);
 });

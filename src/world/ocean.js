@@ -24,10 +24,10 @@ function addCreaseShader(material, strength) {
   material.customProgramCacheKey = () => `paper-creases-${strength}`;
 }
 
-export function createOcean({ THREE, scene, qualityTier, material }) {
+export function createOcean({ THREE, scene, qualityTier, material, farMaterial }) {
   const rings = qualityTier === "light" ? 18 : 24;
   const segments = qualityTier === "light" ? 56 : 72;
-  const maximumRadius = 23.5;
+  const maximumRadius = 26;
   const positions = [0, 0, 0];
   const indices = [];
   const outlineRandom = seededRandom(31415);
@@ -112,6 +112,15 @@ export function createOcean({ THREE, scene, qualityTier, material }) {
   scene.add(mesh);
   addCreaseShader(material, 0.035);
 
+  const farRadius = 140;
+  const farGeometry = new THREE.RingGeometry(maximumRadius * 0.93, farRadius, 64, 6);
+  farGeometry.rotateX(-Math.PI / 2);
+  const farMesh = new THREE.Mesh(farGeometry, farMaterial || material);
+  farMesh.name = "distant water";
+  farMesh.position.y = -0.06;
+  farMesh.frustumCulled = false;
+  scene.add(farMesh);
+
   const base = new Float32Array(geometry.attributes.position.array);
   const colorsOut = geometry.attributes.color.array;
   const baseColors = new Float32Array(colorsOut);
@@ -122,6 +131,8 @@ export function createOcean({ THREE, scene, qualityTier, material }) {
   const swellTerms = 4;
   const swellRate = new Float32Array([0.58, -0.41, 0.83, 0.26]);
   const swellGain = new Float32Array([0.1, 0.09, 0.032, 0.055]);
+  const swellAxisX = new Float32Array([0.43, 0, 0.72, 0.18]);
+  const swellAxisZ = new Float32Array([0, 0.36, 0.72, -0.23]);
   const swellSpace = new Float32Array(vertexCount * swellTerms);
   const swellCos = new Float32Array(vertexCount * swellTerms);
   const halfPi = Math.PI * 0.5;
@@ -300,18 +311,30 @@ export function createOcean({ THREE, scene, qualityTier, material }) {
 
   function update(delta, state) {
     const motion = state.reducedMotion ? 0.32 : 1;
-    recentre(state.originX, state.originZ);
+    const safeX = Number.isFinite(state.originX) ? state.originX : 0;
+    const safeZ = Number.isFinite(state.originZ) ? state.originZ : 0;
+    recentre(safeX, safeZ);
+    mesh.position.x = safeX;
+    mesh.position.z = safeZ;
+    farMesh.position.x = safeX;
+    farMesh.position.z = safeZ;
     const out = geometry.attributes.position.array;
     const damping = Math.exp(-8.4 * delta);
     const ambientGain = motion * (1 + state.motionEnergy * 0.72);
-    const s0 = Math.sin(state.sceneTime * swellRate[0]);
-    const c0 = Math.cos(state.sceneTime * swellRate[0]);
-    const s1 = Math.sin(state.sceneTime * swellRate[1]);
-    const c1 = Math.cos(state.sceneTime * swellRate[1]);
-    const s2 = Math.sin(state.sceneTime * swellRate[2]);
-    const c2 = Math.cos(state.sceneTime * swellRate[2]);
-    const s3 = Math.sin(state.sceneTime * swellRate[3]);
-    const c3 = Math.cos(state.sceneTime * swellRate[3]);
+    const offsetX = Number.isFinite(state.originX) ? state.originX : 0;
+    const offsetZ = Number.isFinite(state.originZ) ? state.originZ : 0;
+    const phase0 = state.sceneTime * swellRate[0] + swellAxisX[0] * offsetX + swellAxisZ[0] * offsetZ;
+    const phase1 = state.sceneTime * swellRate[1] + swellAxisX[1] * offsetX + swellAxisZ[1] * offsetZ;
+    const phase2 = state.sceneTime * swellRate[2] + swellAxisX[2] * offsetX + swellAxisZ[2] * offsetZ;
+    const phase3 = state.sceneTime * swellRate[3] + swellAxisX[3] * offsetX + swellAxisZ[3] * offsetZ;
+    const s0 = Math.sin(phase0);
+    const c0 = Math.cos(phase0);
+    const s1 = Math.sin(phase1);
+    const c1 = Math.cos(phase1);
+    const s2 = Math.sin(phase2);
+    const c2 = Math.cos(phase2);
+    const s3 = Math.sin(phase3);
+    const c3 = Math.cos(phase3);
 
     for (let index = 0; index < vertexCount; index += 1) {
       const positionIndex = index * 3;
@@ -324,7 +347,7 @@ export function createOcean({ THREE, scene, qualityTier, material }) {
         (swellSpace[tableIndex + 2] * c2 + swellCos[tableIndex + 2] * s2) * swellGain[2] +
         (swellSpace[tableIndex + 3] * c3 + swellCos[tableIndex + 3] * s3) * swellGain[3]
       ) * ambientGain;
-      const hinge = sample(x, z);
+      const hinge = sample(x + offsetX, z + offsetZ);
       const lateralScale = 0.16 + Math.abs(hinge) * 0.62;
       const displacedX = x + clamp(gradientX * lateralScale, -0.3, 0.3);
       const displacedZ = z + clamp(gradientZ * lateralScale, -0.3, 0.3);
@@ -349,6 +372,9 @@ export function createOcean({ THREE, scene, qualityTier, material }) {
 
   return {
     mesh,
+    farMesh,
+    farGeometry,
+    maximumRadius,
     geometry,
     sample,
     stampSegment,

@@ -58,6 +58,16 @@ class FakeGeometry {
   }
 }
 
+class FakeRingGeometry {
+  constructor(innerRadius, outerRadius) {
+    this.isRing = true;
+    this.innerRadius = innerRadius;
+    this.outerRadius = outerRadius;
+    this.attributes = { position: new FakeAttribute(new Float32Array(6), 3) };
+  }
+  rotateX() { return this; }
+}
+
 class FakeColor {
   setRGB(red, green, blue) {
     this.r = red;
@@ -69,6 +79,7 @@ class FakeColor {
 
 const fakeThree = {
   BufferGeometry: FakeGeometry,
+  RingGeometry: FakeRingGeometry,
   Float32BufferAttribute: FakeAttribute,
   BufferAttribute: FakeAttribute,
   DynamicDrawUsage: 35048,
@@ -78,6 +89,8 @@ const fakeThree = {
       this.geometry = geometry;
       this.material = material;
       this.name = "";
+      this.position = { x: 0, y: 0, z: 0 };
+      this.frustumCulled = true;
     }
   }
 };
@@ -121,12 +134,23 @@ function allFinite(array) {
   return Array.from(array).every((value) => Number.isFinite(value));
 }
 
-test("the ocean joins the scene as a named paper mesh", () => {
+test("the ocean joins the scene as a named paper mesh plus distant water", () => {
   const { scene, ocean, material } = createTestOcean();
-  assert.equal(scene.added.length, 1);
+  assert.equal(scene.added.length, 2, "the scene should hold the faceted ocean and the distant water ring");
   assert.equal(scene.added[0], ocean.mesh);
+  assert.equal(scene.added[1], ocean.farMesh);
   assert.equal(ocean.mesh.name, "faceted paper ocean");
+  assert.equal(ocean.farMesh.name, "distant water");
   assert.match(material.customProgramCacheKey(), /^paper-creases-/);
+});
+
+test("the distant water ring starts just inside the detailed ocean so the two never gap", () => {
+  const { ocean } = createTestOcean();
+  assert.ok(ocean.farGeometry.isRing, "the distant water should be a ring, not a disc, so it does not z-fight the detail patch");
+  assert.ok(
+    ocean.farGeometry.innerRadius < ocean.maximumRadius,
+    `the ring starts at ${ocean.farGeometry.innerRadius}, which would leave a visible gap before ${ocean.maximumRadius}`
+  );
 });
 
 test("the light quality tier builds fewer vertices than the full tier", () => {
@@ -237,7 +261,7 @@ test("the crease field follows the player across the whole playable area", () =>
         x = target.x;
         z = target.z;
       }
-      ocean.update(1 / 60, { reducedMotion: false, motionEnergy: 0, sceneTime: steps / 60, originX: x, originZ: z });
+      ocean.recentre(x, z);
       if (Number.isFinite(ocean.originX) && Number.isFinite(ocean.originZ)) {
         worst = Math.max(worst, Math.abs(ocean.originX - x), Math.abs(ocean.originZ - z));
       }
@@ -249,6 +273,16 @@ test("the crease field follows the player across the whole playable area", () =>
   assert.ok(Number.isFinite(worst), "the field centre became a non-finite value while travelling");
   assert.ok(worst > 0, "the field centre never moved, so it cannot follow the player");
   assert.ok(worst <= halfWidth, `the player drifted up to ${worst.toFixed(2)} units from the field centre, past its ${halfWidth} unit half-width`);
+});
+
+test("the field recentres during a normal frame, not only when called directly", () => {
+  const { ocean } = createTestOcean();
+  const startX = ocean.originX;
+  const startZ = ocean.originZ;
+  ocean.update(1 / 60, { reducedMotion: false, motionEnergy: 0, sceneTime: 0, originX: 40, originZ: 30 });
+  assert.notEqual(ocean.originX, startX, "update() never handed the player position to the field");
+  assert.notEqual(ocean.originZ, startZ, "update() never handed the player position to the field");
+  assert.ok(Math.abs(ocean.originX - 40) < 24 && Math.abs(ocean.originZ - 30) < 24, "the field did not recentre onto the player during update");
 });
 
 test("a fold made far from the origin still deforms the water", () => {

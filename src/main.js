@@ -390,8 +390,8 @@ const oceanMaterial = createPaperMaterial("#d6bf8d", "#2b4b5c", {
   bumpMap: paperTexture,
   bumpScale: 0.045
 });
-const creamMaterial = createPaperMaterial("#e2c99c", "#a8b7b2");
-const innerMaterial = createPaperMaterial("#ecd9ac", "#c6b795");
+const farWaterMaterial = createPaperMaterial("#cbb68d", "#2b4b5c", { roughness: 0.96, opacity: 1 });
+const creamMaterial = createPaperMaterial("#e2c99c", "#a8b7b2");const innerMaterial = createPaperMaterial("#ecd9ac", "#c6b795");
 const vermilionMaterial = createPaperMaterial("#c94b32", "#e15a3d");
 const indigoMaterial = createPaperMaterial("#24475c", "#547d96");
 const goldMaterial = createPaperMaterial("#b88a32", "#d7ac57", { roughness: 0.68 });
@@ -418,7 +418,7 @@ function geometryFromTriangles(triangles) {
   return geometry;
 }
 
-const oceanWorld = createOcean({ THREE, scene, qualityTier, material: oceanMaterial });
+const oceanWorld = createOcean({ THREE, scene, qualityTier, material: oceanMaterial, farMaterial: farWaterMaterial });
 const ocean = oceanWorld.mesh;
 const sampleCreaseField = oceanWorld.sample;
 const stampCreaseSegment = oceanWorld.stampSegment;
@@ -497,7 +497,7 @@ focalLight.position.set(-3.6, 3.2, 3.4);
 const ambientLight = new THREE.AmbientLight(moods.dawn.hemiSky, 0.1);
 scene.add(hemiLight, keyLight, rimLight, vermilionLight, focalLight, ambientLight);
 scene.background = moods.dawn.background.clone();
-scene.fog = new THREE.Fog(moods.dawn.fog, 15, 52);
+scene.fog = new THREE.Fog(moods.dawn.fog, 46, 104);
 
 const sunMaterial = new THREE.MeshBasicMaterial({ color: moods.dawn.gold, transparent: true, opacity: 0.66, depthWrite: false, side: THREE.DoubleSide });
 const sunHaloMaterial = new THREE.MeshBasicMaterial({ color: moods.dawn.gold, transparent: true, opacity: 0.1, depthWrite: false, side: THREE.DoubleSide });
@@ -1880,7 +1880,7 @@ function animate() {
   if (!paused) {
     islandWorld.update(sceneTime, reducedMotion ? 0.1 : 1 + motionEnergy * 0.35);
     landmarks.update(sceneTime, reducedMotion ? 0.12 : 1 + motionEnergy * 0.3);
-    horizon.update(sceneTime, presence.state.yaw);
+    horizon.update(sceneTime, presence.state);
     backdrop.update(sceneTime);
     atmosphere.update(sceneTime, { reducedMotion, motionEnergy, foldEnergy });
   }
