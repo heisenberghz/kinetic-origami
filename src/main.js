@@ -1,5 +1,5 @@
 import { createLandmarks, landmarkMetrics } from "./world/landmarks.js";
-import { regionAt, lotusSpecs, craneSpecs, foregroundSailSpecs, pushOutOfLandmarks } from "./world/layout.js";
+import { regions, regionAt, lotusSpecs, craneSpecs, foregroundSailSpecs, pushOutOfLandmarks } from "./world/layout.js";
 import { createHorizon } from "./world/horizon.js";
 import { createBackdrop } from "./world/backdrop.js";
 import { readHarnessParams, createStatsPanel } from "./world/harness.js";
@@ -7,6 +7,7 @@ import { createPresence, presenceLimits } from "./world/presence.js";
 import { createAtmosphere } from "./world/atmosphere.js";
 import { createIslands } from "./world/islands.js";
 import { createOcean } from "./world/ocean.js";
+import { buildSectionSpecs, createSections, sectionDetailAt } from "./world/sections.js";
 import { createMigration } from "./world/migration.js";
 
 const loadingScreen = document.querySelector("#loading");
@@ -807,6 +808,19 @@ const contactShadowGeometry = new THREE.CircleGeometry(1, 20);
 contactShadowGeometry.rotateX(-Math.PI / 2);
 const contactShadowMaterial = new THREE.MeshBasicMaterial({ color: moods.dawn.under, transparent: true, opacity: 0.08, depthWrite: false, side: THREE.DoubleSide, toneMapped: false });
 contactShadowMaterial.forceSinglePass = true;
+const sections = createSections({ specs: buildSectionSpecs(regions) });
+const dormantSections = new Set();
+
+function applySectionVisibility() {
+  const groups = landmarks.groupsById || {};
+  for (const id of Object.keys(groups)) {
+    const visible = sections.isVisible(id);
+    groups[id].visible = visible;
+    if (visible) dormantSections.delete(id);
+    else dormantSections.add(id);
+  }
+}
+
 const contactShadowCount = islands.length + lotusFlowers.length + landmarks.anchors.length;
 const contactShadowInstances = new THREE.InstancedMesh(contactShadowGeometry, contactShadowMaterial, contactShadowCount);
 contactShadowInstances.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -829,9 +843,15 @@ function updateContactShadows() {
       contactShadowTransform.scale.set(0.95 * shadow.scale, 1, 0.5 * shadow.scale);
     } else if (shadow.kind === "anchor") {
       const anchor = shadow.source;
-      contactShadowTransform.position.set(anchor.x, 0.022, anchor.z);
-      contactShadowTransform.rotation.set(0, 0, 0);
-      contactShadowTransform.scale.set(0.95 * shadow.scale, 1, 0.62 * shadow.scale);
+      if (dormantSections.has(anchor.sectionId)) {
+        contactShadowTransform.position.set(anchor.x, 0.022, anchor.z);
+        contactShadowTransform.rotation.set(0, 0, 0);
+        contactShadowTransform.scale.set(0, 0, 0);
+      } else {
+        contactShadowTransform.position.set(anchor.x, 0.022, anchor.z);
+        contactShadowTransform.rotation.set(0, 0, 0);
+        contactShadowTransform.scale.set(0.95 * shadow.scale, 1, 0.62 * shadow.scale);
+      }
     } else {
       const lotus = shadow.source;
       const unfurl = lotus.bloom;
@@ -1648,6 +1668,8 @@ function clearCreaseMemory() {
 function resetScene() {
   clearCreaseMemory();
   presence.reset();
+  sections.reset();
+  applySectionVisibility();
   presence.state.yaw = viewProfile.startYaw;
   presence.state.pitch = viewProfile.startPitch;
   heldKeys.clear();
@@ -1872,6 +1894,9 @@ function animate() {
   beginFoldHold();
   applyLookKeys(sceneDelta);
   updateCamera(sceneDelta);
+  const visibleBefore = sections.visibleIds.slice().sort().join(",");
+  sections.update(presence.state.x, presence.state.z);
+  if (sections.visibleIds.slice().sort().join(",") !== visibleBefore) applySectionVisibility();
   updateCreaseSystem(sceneDelta);
   oceanWorld.update(sceneDelta, { reducedMotion, motionEnergy, sceneTime, originX: presence.state.x, originZ: presence.state.z });
   updateManta(sceneDelta);

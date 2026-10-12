@@ -267,7 +267,8 @@ The UI must never compete with the focal silhouette. It should feel like a museu
 
 - Eye-level roaming and any wide vista both hold the frame budget.
 - Draw submissions do not grow with the number of landmarks.
-- At most two sections are active at distance.
+- At most two sections carry full detail at once.
+- No section the player can see ever blinks out while travelling.
 - Adaptive DPR settles without visible oscillation.
 - No long pause occurs when entering a new mood, crossing a district boundary, or resizing.
 - The performance probe, if used, is removed before the final production commit.
@@ -333,7 +334,7 @@ that are currently load-bearing. Each must be solved, not just the camera.
 | Crease field | The 65x65 grid spans 48 units, the middle third of the new map | Field recentres on the player, keeping 0.75 per cell detail anywhere |
 | Backdrop and horizon | Ridge rings sit at radius 28.5 to 35.5, which would end up inside the map | Rebuild per section, scaled outward |
 | Fog | Near 14 and far 46 were tuned for a 25-unit world | Re-tune for the new scale. Note that fog does not currently cull the backdrop or horizon |
-| Draw submissions | 48 are already used of a 50 budget, and seven districts would need roughly 104 | At most two sections active at distance |
+| Draw submissions | 48 are already used of a 50 budget, and seven districts would need roughly 104 | At most two sections at full detail, all visible sections still drawn |
 
 The draw ceiling is the governing constraint, but the first draft of this track assumed scene fog would
 enforce it. Checking the code showed that assumption is wrong. `backdrop.js` and `horizon.js` both set
@@ -351,8 +352,13 @@ culling budget can be called solved; retuning scene fog alone will not do it.
    diorama and feels wrong at eye level.
 2. **World expansion.** Ocean to radius 75, player-following detail patch, recentred crease field,
    rebuilt backdrop and horizon.
-3. **Sections and culling.** Each district gets an activation radius and a detail level. Follow the
-   existing island instancing precedent. Hard cap of two active sections.
+3. **Sections and culling.** Each district gets a visibility radius and a detail level. Follow the
+   existing island instancing precedent. Hard cap of two sections. **Built with a correction:** the cap
+   governs full detail, not visibility. With three districts the farthest pair sits 59 units apart, so
+   every district is inside every other's visibility radius from anywhere on the map. Capping
+   *visibility* at two would have hidden a district the player could plainly see, and the sections
+   swapped constantly while walking. Instead a district stays visible out to 74 units and only the
+   nearest two get full detail within 58. Nothing the player can see ever blinks out.
 4. **Click-to-travel.** Raycast landmarks at distance and glide to their anchor. Harness poses become
    travel destinations rather than orbit presets.
 5. **New content.** Paper Span, Terraces, Kiln, and Archive geometry.

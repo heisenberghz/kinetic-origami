@@ -139,7 +139,7 @@ export function createLandmarks({ THREE, scene, qualityTier, materials, occluder
   addSpirePart(corniceLow, 0.35, -0.25, 1.5, materials.vermilion);
   addSpirePart(corniceHigh, 0.3, 0.2, 2.9, materials.cream);
   addSpirePart(finialSize, finialRise, 0.15, finialBase, materials.gold);
-  anchors.push({ x: regions[0].x, z: regions[0].z, scale: landmarkMetrics.cathedral.planRadius });
+  anchors.push({ sectionId: regions[0].id, x: regions[0].x, z: regions[0].z, scale: landmarkMetrics.cathedral.planRadius });
 
   const lagoon = new THREE.Group();
   lagoon.position.set(regions[1].x, 0, regions[1].z);
@@ -166,7 +166,7 @@ export function createLandmarks({ THREE, scene, qualityTier, materials, occluder
       scale: reedScaleBase + Math.sin(index * 2.3) * reedScaleSpread
     });
   }
-  anchors.push({ x: regions[1].x, z: regions[1].z, scale: landmarkMetrics.lagoon.planRadius * 0.45 });
+  anchors.push({ sectionId: regions[1].id, x: regions[1].x, z: regions[1].z, scale: landmarkMetrics.lagoon.planRadius * 0.45 });
 
   const shoals = new THREE.Group();
   shoals.position.set(regions[2].x, 0, regions[2].z);
@@ -198,9 +198,15 @@ export function createLandmarks({ THREE, scene, qualityTier, materials, occluder
     shards.setColorAt(index, shardTints[index % shardTints.length]);
   }
   shards.instanceColor.needsUpdate = true;
-  anchors.push({ x: regions[2].x, z: regions[2].z, scale: landmarkMetrics.shoals.planRadius * 0.45 });
+  anchors.push({ sectionId: regions[2].id, x: regions[2].x, z: regions[2].z, scale: landmarkMetrics.shoals.planRadius * 0.45 });
 
   group.add(cathedral, lagoon, shoals);
+
+  const groupsById = {
+    [regions[0].id]: cathedral,
+    [regions[1].id]: lagoon,
+    [regions[2].id]: shoals
+  };
   scene.add(group);
 
   function update(sceneTime, motion) {
@@ -235,5 +241,5 @@ export function createLandmarks({ THREE, scene, qualityTier, materials, occluder
 
   update(0, 1);
 
-  return { group, anchors, update };
+  return { group, anchors, update, groupsById };
 }

@@ -100,8 +100,15 @@ test("main.js drives the camera from presence state every frame", () => {
   assert.match(mainSource, /camera\.rotation\.x = presence\.state\.pitch/, "the camera must use the presence pitch");
 });
 
+test("main.js drives the section system from the presence position every frame", () => {
+  assert.match(mainSource, /sections\.update\(presence\.state\.x, presence\.state\.z\)/, "sections must be updated from where the presence is standing");
+  assert.match(mainSource, /function applySectionVisibility\(\)/, "main.js needs a way to push section state onto the scene");
+  assert.match(mainSource, /sections\.reset\(\)/, "resetting the scene must reset the sections too");
+  assert.match(mainSource, /landmarks\.groupsById/, "main.js must reach the per district landmark groups");
+});
+
 test("every extracted world module is imported by main.js", () => {
-  const modules = ["atmosphere", "backdrop", "harness", "horizon", "islands", "landmarks", "layout", "migration", "ocean", "presence"];
+  const modules = ["atmosphere", "backdrop", "harness", "horizon", "islands", "landmarks", "layout", "migration", "ocean", "presence", "sections"];
   for (const name of modules) {
     assert.match(mainSource, new RegExp(`from "\\./world/${name}\\.js"`), `main.js never imports world/${name}.js`);
   }
