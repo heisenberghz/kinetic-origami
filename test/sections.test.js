@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { regions } from "../src/world/layout.js";
-import { buildSectionSpecs, createSections, sectionLimits, sectionDetailAt } from "../src/world/sections.js";
+import { buildSectionSpecs, createSections, sectionLimits, sectionDetailAt, travelTargetFor } from "../src/world/sections.js";
 
 function makeSections(limitOverrides = {}) {
   return createSections({ specs: buildSectionSpecs(regions), limits: { ...sectionLimits, ...limitOverrides } });
@@ -168,4 +168,41 @@ test("each district appears exactly once in the section specs", () => {
   const specs = buildSectionSpecs(regions);
   const ids = specs.map((entry) => entry.id);
   assert.equal(new Set(ids).size, ids.length, `duplicate section ids: ${ids.join(", ")}`);
+});
+
+test("travel targets stand outside the district and face it", () => {
+  for (const region of regions) {
+    for (const from of [{ x: 0, z: 0 }, { x: 50, z: -40 }, { x: -55, z: 30 }, { x: region.x, z: region.z }]) {
+      const target = travelTargetFor(region, from.x, from.z);
+      const gap = Math.hypot(target.x - region.x, target.z - region.z);
+      assert.ok(gap > region.radius, `the travel target for ${region.id} lands only ${gap.toFixed(2)} from its centre, inside the ${region.radius} footprint`);
+      const facing = Math.atan2(-(region.x - target.x), -(region.z - target.z));
+      const error = Math.abs(Math.atan2(Math.sin(facing - target.yaw), Math.cos(facing - target.yaw)));
+      assert.ok(error < 1e-9, `the travel target for ${region.id} does not face the district`);
+    }
+  }
+});
+
+test("travel targets stop on the near side instead of crossing the district", () => {
+  const region = regions[0];
+  const from = { x: 40, z: 10 };
+  const target = travelTargetFor(region, from.x, from.z);
+  const outwardX = target.x - region.x;
+  const outwardZ = target.z - region.z;
+  const approachX = from.x - region.x;
+  const approachZ = from.z - region.z;
+  const alignment = (outwardX * approachX + outwardZ * approachZ) / (Math.hypot(outwardX, outwardZ) * Math.hypot(approachX, approachZ));
+  assert.ok(alignment > 0.99, `the target sits ${alignment.toFixed(3)} of the way round the far side, so travelling there would cross the district`);
+  const gap = Math.hypot(target.x - from.x, target.z - from.z);
+  assert.ok(gap > 0, "the travel target is already where the presence stands");
+});
+
+test("travel targets always stay inside the playable area", () => {
+  for (const region of regions) {
+    for (const from of [{ x: 0, z: 0 }, { x: 58, z: 0 }, { x: -58, z: 0 }, { x: 0, z: 58 }, { x: 0, z: -58 }]) {
+      const target = travelTargetFor(region, from.x, from.z);
+      const reach = Math.hypot(target.x, target.z);
+      assert.ok(reach <= 58, `travelling to ${region.id} from (${from.x}, ${from.z}) would end at ${reach.toFixed(1)}, past the playable radius`);
+    }
+  }
 });

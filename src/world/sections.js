@@ -91,6 +91,14 @@ export function createSections({ specs, limits = sectionLimits }) {
   };
 }
 
+export function travelTargetFor(region, fromX, fromZ) {
+  const standoff = region.radius * 2.3;
+  const approach = Math.atan2(fromX - region.x, fromZ - region.z);
+  const x = region.x + Math.sin(approach) * standoff;
+  const z = region.z + Math.cos(approach) * standoff;
+  return { x, z, yaw: Math.atan2(-(region.x - x), -(region.z - z)) };
+}
+
 export function sectionDetailAt(sections, id) {
   if (sections.isActive(id)) return "full";
   if (sections.isVisible(id)) return "reduced";

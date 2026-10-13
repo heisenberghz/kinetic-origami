@@ -23,9 +23,11 @@ function pairParam(params, key) {
 export function readHarnessParams(search) {
   const params = new URLSearchParams(search);
   const at = params.get("at");
+  const go = params.get("go");
   const mood = params.get("mood");
   return {
     at: pairParam(params, "at"),
+    go: go && travelPresets[go] ? go : null,
     mood: mood === "midnight" || mood === "dawn" ? mood : null,
     yaw: numberParam(params, "yaw", Math.PI / 180),
     pitch: numberParam(params, "pitch", Math.PI / 180),

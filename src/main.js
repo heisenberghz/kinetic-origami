@@ -2,12 +2,12 @@ import { createLandmarks, landmarkMetrics } from "./world/landmarks.js";
 import { regions, regionAt, lotusSpecs, craneSpecs, foregroundSailSpecs, pushOutOfLandmarks } from "./world/layout.js";
 import { createHorizon } from "./world/horizon.js";
 import { createBackdrop } from "./world/backdrop.js";
-import { readHarnessParams, createStatsPanel } from "./world/harness.js";
+import { readHarnessParams, travelPresets, createStatsPanel } from "./world/harness.js";
 import { createPresence, presenceLimits } from "./world/presence.js";
 import { createAtmosphere } from "./world/atmosphere.js";
 import { createIslands } from "./world/islands.js";
 import { createOcean } from "./world/ocean.js";
-import { buildSectionSpecs, createSections, sectionDetailAt } from "./world/sections.js";
+import { buildSectionSpecs, createSections, sectionDetailAt, travelTargetFor } from "./world/sections.js";
 import { createMigration } from "./world/migration.js";
 
 const loadingScreen = document.querySelector("#loading");
@@ -125,7 +125,7 @@ renderer.toneMappingExposure = 1.08;
 const canvas = renderer.domElement;
 canvas.tabIndex = 0;
 canvas.setAttribute("role", "application");
-canvas.setAttribute("aria-label", "A drifting presence over an interactive origami ocean. Drag to travel through the world, or hold briefly before dragging to fold the paper instead. Move the mouse to steer your heading. Use W A S D to travel and Shift to move faster. Use the arrow keys to look around, or alt-drag and two-finger drag. Hover or tap lotus flowers. Press B to open and cycle lotuses, Enter to close the keyboard-selected lotus, Space to pause ambient motion, M for mood, and R to reset.");
+canvas.setAttribute("aria-label", "A drifting presence over an interactive origami ocean. Click a landmark to travel there. Drag to travel through the world, or hold briefly before dragging to fold the paper instead. Move the mouse to steer your heading. Use W A S D to travel and Shift to move faster. Use the arrow keys to look around, C and Z to rise and descend. Hover or tap lotus flowers. Press B to open and cycle lotuses, Enter to close the keyboard-selected lotus, Space to pause ambient motion, M for mood, and R to reset.");
 stage.appendChild(canvas);
 
 const scene = new THREE.Scene();
@@ -265,6 +265,8 @@ let pointerStartY = 0;
 let pointerLastX = 0;
 let pointerLastY = 0;
 let lastHoverTest = -10;
+let lastDistrictTest = -10;
+let hoveredDistrictId = null;
 let lastFoldRaycastAt = -10;
 let primaryMode = "fold";
 let pointerDownLotus = null;
@@ -1090,6 +1092,8 @@ function setPaused(nextPaused, shouldAnnounce = true) {
 }
 
 function setPointerNdc(clientX, clientY) {
+  pointerClientX = clientX;
+  pointerClientY = clientY;
   const bounds = canvas.getBoundingClientRect();
   const nextX = (clientX - bounds.left) / bounds.width * 2 - 1;
   pointerNdc.y = -(clientY - bounds.top) / bounds.height * 2 + 1;
@@ -1122,6 +1126,76 @@ function oceanAtPointer() {
   return hits[0].point;
 }
 
+const districtPickPoint = new THREE.Vector3();
+const districtScreen = new THREE.Vector3();
+let pointerClientX = 0;
+let pointerClientY = 0;
+const districtPickRadius = 190;
+
+function districtAtPointer() {
+  const width = window.innerWidth;
+  const height = window.innerHeight;
+  let best = null;
+  let bestDistance = districtPickRadius;
+  for (const region of regions) {
+    if (!sections.isVisible(region.id)) continue;
+    districtPickPoint.set(region.x, landmarkMetrics[region.id].height * 0.55, region.z);
+    districtScreen.copy(districtPickPoint).project(camera);
+    if (districtScreen.z > 1) continue;
+    const screenX = (districtScreen.x * 0.5 + 0.5) * width;
+    const screenY = (-districtScreen.y * 0.5 + 0.5) * height;
+    if (screenX < -districtPickRadius || screenX > width + districtPickRadius) continue;
+    if (screenY < -districtPickRadius || screenY > height + districtPickRadius) continue;
+    const gap = Math.hypot(pointerClientX - screenX, pointerClientY - screenY);
+    if (gap >= bestDistance) continue;
+    bestDistance = gap;
+    best = region.id;
+  }
+  return best;
+}
+
+function markDistrictTargeted(id) {
+  for (const [districtId, group] of Object.entries(landmarks.groupsById || {})) {
+    if (!group.children.length) continue;
+    const targeted = districtId === id;
+    group.traverse((child) => {
+      if (!child.material || child === group) return;
+      if (targeted) child.material.emissive?.set("#3a2a12");
+      else if (child.material.emissive) child.material.emissive.set("#000000");
+    });
+  }
+}
+
+function travelToDistrict(id) {
+  const region = regions.find((entry) => entry.id === id);
+  if (!region) return false;
+  const target = travelTargetFor(region, presence.state.x, presence.state.z);
+  const gap = Math.hypot(presence.state.x - target.x, presence.state.z - target.z);
+  if (gap < 1.5) {
+    announce(`Already at ${region.name}.`);
+    return false;
+  }
+  presence.glideTo(target.x, target.z, 1.4);
+  announce(`Travelling to ${region.name}.`);
+  return true;
+}
+
+function refreshHoveredDistrict() {
+  const eventTime = performance.now();
+  if (eventTime - lastDistrictTest < 70) return;
+  lastDistrictTest = eventTime;
+  const id = districtAtPointer();
+  if (id === hoveredDistrictId) return;
+  hoveredDistrictId = id;
+  markDistrictTargeted(id);
+  refreshLotusCursor();
+  if (plateTitle) {
+    if (id) plateTitle.textContent = `${regions.find((entry) => entry.id === id).name} · click to travel`;
+    else if (!activeRegion) plateTitle.textContent = "Manta 01 · in passage";
+  }
+  if (cursorSeal) cursorSeal.classList.toggle("is-targeting", Boolean(id));
+}
+
 function updateCursor(clientX, clientY, pointerType) {
   keyboardCursorLotus = null;
   if (pointerType !== "mouse") {
@@ -1132,6 +1206,7 @@ function updateCursor(clientX, clientY, pointerType) {
   cursorSeal.style.left = `${clientX}px`;
   cursorSeal.style.top = `${clientY}px`;
   cursorSeal.classList.add("is-visible");
+  if (primaryPointer === null && !presence.isGliding()) refreshHoveredDistrict();
   refreshLotusCursor();
 }
 
@@ -1271,29 +1346,35 @@ function releasePointer(event, cancelled) {
   const stored = interactivePointers.get(event.pointerId);
   const wasPrimary = event.pointerId === primaryPointer;
   const releasedMode = stored ? stored.mode : primaryMode;
-  const wasClick = wasPrimary && !cancelled && !gestureHadPinch && !pointerMoved && releasedMode === "fold";
+  const wasTap = wasPrimary && !cancelled && !gestureHadPinch && !pointerMoved;
+  const wasClick = wasTap && releasedMode === "fold";
   interactivePointers.delete(event.pointerId);
   if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
 
-  if (wasClick) {
+  if (wasTap) {
     setPointerNdc(event.clientX, event.clientY);
-    const lotus = pointerDownLotus;
-    let realHit = false;
-    if (lotus) {
-      toggleLotus(lotus);
-      realHit = true;
-    } else if (pointerDownOcean && !foldHasLastPoint) {
-      const oceanPoint = oceanAtPointer();
-      if (oceanPoint) {
-        activateFoldImpulse(oceanPoint.x + 0.16, oceanPoint.z, oceanPoint.x, oceanPoint.z, 2.4, 0, performance.now());
+    const district = districtAtPointer();
+    if (district && travelToDistrict(district)) {
+      hoveredDistrictId = null;
+    } else if (wasClick) {
+      const lotus = pointerDownLotus;
+      let realHit = false;
+      if (lotus) {
+        toggleLotus(lotus);
         realHit = true;
+      } else if (pointerDownOcean && !foldHasLastPoint) {
+        const oceanPoint = oceanAtPointer();
+        if (oceanPoint) {
+          activateFoldImpulse(oceanPoint.x + 0.16, oceanPoint.z, oceanPoint.x, oceanPoint.z, 2.4, 0, performance.now());
+          realHit = true;
+        }
+      } else {
+        realHit = foldHasLastPoint;
       }
-    } else {
-      realHit = foldHasLastPoint;
-    }
-    if (realHit) {
-      scatterCranes(1);
-      announce(lotus ? "Paper lotus toggled." : "A paper crease was pressed into the ocean.");
+      if (realHit) {
+        scatterCranes(1);
+        announce(lotus ? "Paper lotus toggled." : "A paper crease was pressed into the ocean.");
+      }
     }
   } else if (wasPrimary && releasedMode === "fold" && !cancelled && pointerMoved && foldHasLastPoint) {
     markDirectMotion(700);
@@ -1340,6 +1421,8 @@ function releasePointer(event, cancelled) {
 canvas.addEventListener("pointerup", (event) => releasePointer(event, false));
 canvas.addEventListener("pointercancel", (event) => releasePointer(event, true));
 canvas.addEventListener("pointerleave", () => {
+  hoveredDistrictId = null;
+  if (plateTitle && !activeRegion) plateTitle.textContent = "Manta 01 · in passage";
   if (interactivePointers.size === 0) {
     pointerSeen = false;
     pointerWorld.set(0, 0, 0);
@@ -1938,6 +2021,11 @@ function applyHarnessPose() {
   if (harness.at) {
     presence.moveTo(clamp(harness.at.x, -presenceLimits.playableRadius, presenceLimits.playableRadius), clamp(harness.at.z, -presenceLimits.playableRadius, presenceLimits.playableRadius));
   }
+  if (harness.go) {
+    const preset = travelPresets[harness.go];
+    presence.moveTo(preset.x, preset.z, preset.yaw);
+    announce(`Framed ${harness.go}.`);
+  }
   if (harness.yaw !== null) presence.state.yaw = harness.yaw;
   if (harness.pitch !== null) presence.state.pitch = clamp(harness.pitch, presenceLimits.minPitch, presenceLimits.maxPitch);
   if (harness.speed !== null) presence.limits.cruiseSpeed = clamp(harness.speed, 0.5, 24);
@@ -1945,7 +2033,7 @@ function applyHarnessPose() {
   if (harness.mood) setMood(harness.mood, false);
   if (statsPanel) {
     const parts = [];
-    if (harness.pose) parts.push(`pose:${harness.pose}`);
+    if (harness.go) parts.push(`go:${harness.go}`);
     if (harness.mood) parts.push(harness.mood);
     statsPanel.setHeader(parts.length ? parts.join("  ") : "default pose");
   }

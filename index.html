@@ -526,6 +526,7 @@
     .cursor-seal::before { width: 9px; height: 1px; }
     .cursor-seal::after { width: 1px; height: 9px; }
     .cursor-seal.is-visible { opacity: 1; }
+    .cursor-seal.is-targeting { width: 52px; height: 52px; border-color: var(--gold); box-shadow: 0 0 0 6px rgba(184, 138, 50, .22); }
     .cursor-seal.is-blooming { width: 42px; height: 42px; border-color: var(--vermilion); }
 
     #loading {
@@ -743,12 +744,12 @@
       <div class="legend-item"><span class="legend-swatch"></span><span>Bloom / hover the lotus</span></div>
     </aside>
 
-    <div class="hint" aria-hidden="true"><span class="hint-mark"></span><span class="hint-wide">Drag to travel · hold then drag to fold</span><span class="hint-compact">Drag to travel · hold to fold</span></div>
+    <div class="hint" aria-hidden="true"><span class="hint-mark"></span><span class="hint-wide">Click a district to travel there · drag to move · hold then drag to fold</span><span class="hint-compact">Tap a district to travel</span></div>
 
     <aside class="plate">
       <strong id="plateTitle">Manta 01 · in passage</strong>
-      Drag travels · hold then drag folds<br>
-      WASD travels · arrows look · B opens lotuses
+      Click a district to travel there<br>
+      WASD travels · arrows look · C and Z rise and fall
     </aside>
 
     <div class="seal" aria-hidden="true">折</div>
