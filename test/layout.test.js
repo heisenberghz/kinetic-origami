@@ -150,6 +150,25 @@ test("the backdrop ridges are ordered so the far ones rise above the near ones",
   assert.deepEqual(backdropRadii, sorted, `backdrop radii should read near to far, got ${backdropRadii.join(", ")}`);
 });
 
+test("a district reads as a landmark, not a speck on the water", () => {
+  for (const entry of regions) {
+    const metric = landmarkMetrics[entry.id];
+    const nearestGap = Math.min(
+      ...regions
+        .filter((other) => other.id !== entry.id)
+        .map((other) => Math.hypot(other.x - entry.x, other.z - entry.z) - entry.radius - metric.planRadius)
+    );
+    assert.ok(nearestGap > 0, `${entry.id} overlaps a neighbour after scaling`);
+    const satelliteRoom = entry.radius - metric.planRadius - planRadii.island - 0.5;
+    assert.ok(
+      satelliteRoom > 0,
+      `${entry.id} has no room for satellites: only ${satelliteRoom.toFixed(2)} units clear of its ${metric.planRadius.toFixed(2)} unit footprint`
+    );
+    assert.ok(metric.beaconHeight > 12, `${entry.id} has a beacon of ${metric.beaconHeight} units, too short to read across the map`);
+    assert.match(metric.beacon, /^#[0-9a-f]{6}$/i, `${entry.id} has no beacon colour`);
+  }
+});
+
 test("every landmark keeps satellites and cranes overhead", () => {
   for (const entry of regions) {
     const satellites = islandSpecs.filter(([x, z]) => {

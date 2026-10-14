@@ -23,10 +23,12 @@ const shoalScaleBase = 0.92;
 const reedScaleSpread = 0.13;
 const reedScaleBase = 0.85;
 
+const landmarkScale = 2.35;
+
 export const landmarkMetrics = {
-  cathedral: { planRadius: plinthSize * 0.5, height: finialBase + finialRise },
-  lagoon: { planRadius: reedRingRadius + reedSize * 0.5, height: reedRise * (reedScaleBase + reedScaleSpread), basinInnerRadius, reedRingRadius },
-  shoals: { planRadius: shoalArcRadius + shoalSailWidth * 0.5, height: shoalSailHeight * (shoalScaleBase + shoalScaleSpread) }
+  cathedral: { planRadius: plinthSize * 0.5 * landmarkScale, height: (finialBase + finialRise) * landmarkScale, beaconHeight: 26, beacon: "#e8b25a" },
+  lagoon: { planRadius: (reedRingRadius + reedSize * 0.5) * landmarkScale, height: reedRise * (reedScaleBase + reedScaleSpread) * landmarkScale, basinInnerRadius: basinInnerRadius * landmarkScale, reedRingRadius: reedRingRadius * landmarkScale, beaconHeight: 20, beacon: "#8fc7bd" },
+  shoals: { planRadius: (shoalArcRadius + shoalSailWidth * 0.5) * landmarkScale, height: shoalSailHeight * (shoalScaleBase + shoalScaleSpread) * landmarkScale, beaconHeight: 23, beacon: "#e0704f" }
 };
 
 export function createLandmarks({ THREE, scene, qualityTier, materials, occluders }) {
@@ -199,6 +201,39 @@ export function createLandmarks({ THREE, scene, qualityTier, materials, occluder
   }
   shards.instanceColor.needsUpdate = true;
   anchors.push({ sectionId: regions[2].id, x: regions[2].x, z: regions[2].z, scale: landmarkMetrics.shoals.planRadius * 0.45 });
+
+  function addBeacon(district, metric) {
+    const height = metric.beaconHeight;
+    const geometry = new THREE.CylinderGeometry(metric.planRadius * 0.14, metric.planRadius * 0.5, height, 12, 1, true);
+    geometry.translate(0, height * 0.5, 0);
+    const material = new THREE.ShaderMaterial({
+      uniforms: { uColor: { value: new THREE.Color(metric.beacon) } },
+      vertexShader: "varying float vFade;\nvoid main(){\nvFade = uv.y;\ngl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0);\n}",
+      fragmentShader: "uniform vec3 uColor;\nvarying float vFade;\nvoid main(){\nfloat a = pow(vFade, 2.2) * 0.42;\ngl_FragColor = vec4(uColor, a);\n}",
+      transparent: true,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      toneMapped: false,
+      fog: false
+    });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.y = 0.2;
+    mesh.renderOrder = 2;
+    mesh.frustumCulled = false;
+    district.add(mesh);
+    return mesh;
+  }
+
+  for (const district of [cathedral, lagoon, shoals]) {
+    const inner = new THREE.Group();
+    while (district.children.length) inner.add(district.children[0]);
+    inner.scale.setScalar(landmarkScale);
+    district.add(inner);
+  }
+
+  addBeacon(cathedral, landmarkMetrics.cathedral);
+  addBeacon(lagoon, landmarkMetrics.lagoon);
+  addBeacon(shoals, landmarkMetrics.shoals);
 
   group.add(cathedral, lagoon, shoals);
 

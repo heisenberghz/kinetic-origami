@@ -68,6 +68,7 @@ export function createStatsPanel(document) {
   let yawDegrees = 0;
   let pitchDegrees = 0;
   let speed = 0;
+  let districtLine = "";
 
   function render() {
     panel.textContent = [
@@ -78,12 +79,16 @@ export function createStatsPanel(document) {
       `tris   ${triangles}`,
       `dpr    ${dpr.toFixed(2)}`,
       `at ${x.toFixed(1)}, ${z.toFixed(1)}  spd ${speed.toFixed(1)}`,
-      `yaw ${yawDegrees}  pitch ${pitchDegrees}`
+      `yaw ${yawDegrees}  pitch ${pitchDegrees}`,
+      districtLine
     ].join("\n");
   }
 
   return {
     setHeader(text) { header = text; },
+    setDistricts(targetedId, ranked) {
+      districtLine = `aim ${targetedId || "-"} | ` + ranked.map((entry) => `${entry.id.slice(0, 4)} ${entry.gap.toFixed(0)}`).join(" ");
+    },
     setPresence(presenceState) {
       x = presenceState.x;
       z = presenceState.z;

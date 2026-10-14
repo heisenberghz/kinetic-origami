@@ -125,7 +125,7 @@ renderer.toneMappingExposure = 1.08;
 const canvas = renderer.domElement;
 canvas.tabIndex = 0;
 canvas.setAttribute("role", "application");
-canvas.setAttribute("aria-label", "A drifting presence over an interactive origami ocean. Click a landmark to travel there. Drag to travel through the world, or hold briefly before dragging to fold the paper instead. Move the mouse to steer your heading. Use W A S D to travel and Shift to move faster. Use the arrow keys to look around, C and Z to rise and descend. Hover or tap lotus flowers. Press B to open and cycle lotuses, Enter to close the keyboard-selected lotus, Space to pause ambient motion, M for mood, and R to reset.");
+canvas.setAttribute("aria-label", "A drifting presence over an interactive origami ocean. Click a landmark to travel there. Drag to travel through the world, or hold briefly before dragging to fold the paper instead. Use W A S D to travel and Shift to move faster. Use the arrow keys or alt-drag to look around, C and Z to rise and descend. Hover or tap lotus flowers. Press B to open and cycle lotuses, Enter to close the keyboard-selected lotus, Space to pause ambient motion, M for mood, and R to reset.");
 stage.appendChild(canvas);
 
 const scene = new THREE.Scene();
@@ -159,7 +159,6 @@ presence.state.yaw = initialViewProfile.startYaw;
 presence.state.pitch = initialViewProfile.startPitch;
 const travelInput = { forward: 0, strafe: 0, boost: false };
 const heldKeys = new Set();
-let steeringPointerDelta = 0;
 let lookDirection = 1;
 
 let sceneTime = 0;
@@ -257,6 +256,7 @@ const lotusPetalOwners = [];
 const lotusHitMeshes = [];
 const occlusionTargets = [];
 const interactivePointers = new Map();
+const activePointerIds = new Set();
 let primaryPointer = null;
 let pinchDistance = 0;
 let pointerMoved = false;
@@ -1095,12 +1095,8 @@ function setPointerNdc(clientX, clientY) {
   pointerClientX = clientX;
   pointerClientY = clientY;
   const bounds = canvas.getBoundingClientRect();
-  const nextX = (clientX - bounds.left) / bounds.width * 2 - 1;
+  pointerNdc.x = (clientX - bounds.left) / bounds.width * 2 - 1;
   pointerNdc.y = -(clientY - bounds.top) / bounds.height * 2 + 1;
-  if (pointerSeen && primaryPointer === null) {
-    steeringPointerDelta += nextX - pointerNdc.x;
-  }
-  pointerNdc.x = nextX;
   pointerSeen = true;
 }
 
@@ -1139,9 +1135,10 @@ function districtAtPointer() {
   let bestDistance = districtPickRadius;
   for (const region of regions) {
     if (!sections.isVisible(region.id)) continue;
-    districtPickPoint.set(region.x, landmarkMetrics[region.id].height * 0.55, region.z);
+    districtPickPoint.set(region.x, landmarkMetrics[region.id].height * 0.5, region.z);
+    camera.updateMatrixWorld();
     districtScreen.copy(districtPickPoint).project(camera);
-    if (districtScreen.z > 1) continue;
+    if (districtScreen.z > 1 || districtScreen.z < -1) continue;
     const screenX = (districtScreen.x * 0.5 + 0.5) * width;
     const screenY = (-districtScreen.y * 0.5 + 0.5) * height;
     if (screenX < -districtPickRadius || screenX > width + districtPickRadius) continue;
@@ -1156,13 +1153,7 @@ function districtAtPointer() {
 
 function markDistrictTargeted(id) {
   for (const [districtId, group] of Object.entries(landmarks.groupsById || {})) {
-    if (!group.children.length) continue;
-    const targeted = districtId === id;
-    group.traverse((child) => {
-      if (!child.material || child === group) return;
-      if (targeted) child.material.emissive?.set("#3a2a12");
-      else if (child.material.emissive) child.material.emissive.set("#000000");
-    });
+    group.scale.setScalar(districtId === id ? 1.07 : 1);
   }
 }
 
@@ -1180,11 +1171,17 @@ function travelToDistrict(id) {
   return true;
 }
 
-function refreshHoveredDistrict() {
+function refreshHoveredDistrict(force = false) {
   const eventTime = performance.now();
-  if (eventTime - lastDistrictTest < 70) return;
+  if (!force && eventTime - lastDistrictTest < 70) return;
   lastDistrictTest = eventTime;
   const id = districtAtPointer();
+  if (statsPanel) {
+    const nearest = regions
+      .map((entry) => ({ id: entry.id, gap: Math.hypot(entry.x - presence.state.x, entry.z - presence.state.z) }))
+      .sort((a, b) => a.gap - b.gap);
+    statsPanel.setDistricts(id, nearest);
+  }
   if (id === hoveredDistrictId) return;
   hoveredDistrictId = id;
   markDistrictTargeted(id);
@@ -1212,6 +1209,13 @@ function updateCursor(clientX, clientY, pointerType) {
 
 canvas.addEventListener("pointerdown", (event) => {
   event.preventDefault();
+  const livePointers = new Set(
+    [...interactivePointers.keys()].filter((pointerId) => pointerId !== event.pointerId)
+  );
+  for (const pointerId of livePointers) {
+    if (!activePointerIds.has(pointerId)) interactivePointers.delete(pointerId);
+  }
+  activePointerIds.add(event.pointerId);
   const pointerIsMouse = event.pointerType === "mouse";
   if (pointerIsMouse && event.button !== 0 && event.button !== 1 && event.button !== 2) return;
   canvas.focus({ preventScroll: true });
@@ -1219,6 +1223,7 @@ canvas.addEventListener("pointerdown", (event) => {
   const mode = pointerIsMouse && event.altKey ? "look" : "pending";
   markDirectMotion(500);
   interactivePointers.set(event.pointerId, { x: event.clientX, y: event.clientY, mode, downAt: performance.now() });
+  console.info("[pointer]", event.pointerType, "button", event.button, "alt", event.altKey, "tracked", interactivePointers.size, "mode", mode);
   setPointerNdc(event.clientX, event.clientY);
   updateCursor(event.clientX, event.clientY, event.pointerType);
 
@@ -1293,7 +1298,9 @@ canvas.addEventListener("pointermove", (event) => {
     const deltaY = event.clientY - pointerLastY;
     const totalX = event.clientX - pointerStartX;
     const totalY = event.clientY - pointerStartY;
-    if (totalX * totalX + totalY * totalY > 16) pointerMoved = true;
+    const heldMs = performance.now() - (stored.downAt || performance.now());
+    const slop = heldMs < 280 ? 16 : 4;
+    if (totalX * totalX + totalY * totalY > slop * slop) pointerMoved = true;
     if (pointerMoved && stored.mode === "pending") {
       stored.mode = "travel";
       if (primaryPointer === event.pointerId) primaryMode = "travel";
@@ -1344,11 +1351,16 @@ canvas.addEventListener("pointermove", (event) => {
 
 function releasePointer(event, cancelled) {
   const stored = interactivePointers.get(event.pointerId);
+  if (!stored && event.pointerId !== primaryPointer) {
+    interactivePointers.delete(event.pointerId);
+    return;
+  }
   const wasPrimary = event.pointerId === primaryPointer;
   const releasedMode = stored ? stored.mode : primaryMode;
   const wasTap = wasPrimary && !cancelled && !gestureHadPinch && !pointerMoved;
   const wasClick = wasTap && releasedMode === "fold";
   interactivePointers.delete(event.pointerId);
+  activePointerIds.delete(event.pointerId);
   if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
 
   if (wasTap) {
@@ -1418,8 +1430,9 @@ function releasePointer(event, cancelled) {
   }
 }
 
-canvas.addEventListener("pointerup", (event) => releasePointer(event, false));
-canvas.addEventListener("pointercancel", (event) => releasePointer(event, true));
+window.addEventListener("pointerup", (event) => releasePointer(event, false));
+window.addEventListener("pointercancel", (event) => releasePointer(event, true));
+canvas.addEventListener("lostpointercapture", (event) => releasePointer(event, true));
 canvas.addEventListener("pointerleave", () => {
   hoveredDistrictId = null;
   if (plateTitle && !activeRegion) plateTitle.textContent = "Manta 01 · in passage";
@@ -1523,7 +1536,13 @@ canvas.addEventListener("keydown", (event) => {
 
   let handled = true;
   if (key === "r") markDirectMotion(1000);
-  if (key === "b") cycleKeyboardLotus();
+  if (key >= "1" && key <= "9") {
+    const target = regions[Number(key) - 1];
+    if (target) {
+      travelToDistrict(target.id);
+      markDirectMotion(1000);
+    }
+  } else if (key === "b") cycleKeyboardLotus();
   else if (key === "enter") closeKeyboardLotus();
   else if (event.code === "Space") setPaused(!paused);
   else if (key === "m") setMood(activeMood === "dawn" ? "midnight" : "dawn");
@@ -1628,10 +1647,8 @@ function updateCamera(delta) {
   presence.update(delta, {
     forward: travelInput.forward,
     strafe: travelInput.strafe,
-    boost: travelInput.boost,
-    pointerDeltaX: steeringPointerDelta
+    boost: travelInput.boost
   });
-  steeringPointerDelta = 0;
 
   pushOutOfLandmarks(presence.state.x, presence.state.z, presence.state.y, landmarkMetrics, cameraPush);
   presence.state.x = cameraPush.x;

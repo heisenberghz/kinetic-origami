@@ -4,8 +4,8 @@ export const backdropRadii = [82, 88, 94];
 
 const ringSpecs = [
   {
-    day: "#a18a67",
-    night: "#132530",
+    day: "#6b5540",
+    night: "#0e1c26",
     drift: 0.0042,
     bands: [
       { radius: 82, crest: 9.4, phase: 0.4, segments: 132 },
@@ -13,8 +13,8 @@ const ringSpecs = [
     ]
   },
   {
-    day: "#b1966d",
-    night: "#10232f",
+    day: "#7d6549",
+    night: "#0c1a24",
     drift: -0.0026,
     bands: [
       { radius: 88, crest: 13.2, phase: 1.9, segments: 124 },
@@ -22,8 +22,8 @@ const ringSpecs = [
     ]
   },
   {
-    day: "#bc9e72",
-    night: "#0f212e",
+    day: "#8f7454",
+    night: "#0b1822",
     drift: 0.0015,
     bands: [
       { radius: 94, crest: 17.6, phase: 3.3, segments: 116 },
