@@ -1,7 +1,10 @@
 export const regions = [
   { id: "cathedral", name: "Folded Cathedral", x: -14, z: -20, radius: 11.8 },
   { id: "lagoon", name: "Lotus Lagoon", x: -30, z: 6, radius: 10.4 },
-  { id: "shoals", name: "Windbreak Shoals", x: 28, z: 18, radius: 10.9 }
+  { id: "shoals", name: "Windbreak Shoals", x: 28, z: 18, radius: 10.9 },
+  { id: "terraces", name: "The Terraces", x: 2, z: -40, radius: 9 },
+  { id: "archive", name: "The Archive", x: -6, z: 50, radius: 7 },
+  { id: "kiln", name: "The Kiln", x: 44, z: -26, radius: 6 }
 ];
 
 export function regionAt(x, z) {
@@ -22,6 +25,9 @@ export const islandSpecs = [
   [37.75, 18, 0.5, 2], [37.95, 19.03, 0.5, 0],
   [37.76, 20.17, 0.56, 1], [37.17, 21.3, 0.5, 2],
   [-44, -8, 0.46, 0], [-2, -46, 0.46, 1],
+  [-8, -34, 0.5, 0], [8, -30, 0.5, 1],
+  [0, 46, 0.5, 0], [-10, 44, 0.5, 1],
+  [46, -22, 0.5, 0], [40, -34, 0.5, 1],
   [6, 42, 0.46, 2], [49.83, -17.69, 0.54, 0],
   [26, 46, 0.46, 1], [-46.42, 22.47, 0.62, 2],
   [12, -16, 0.46, 0], [-22, 46, 0.46, 1],
@@ -44,7 +50,10 @@ export const craneSpecs = [
   [-27.12, 5.5, 6], [-26.15, 6.6, 6.04],
   [-25.19, 7.7, 6.11], [-24.24, 5.5, 6.2],
   [31.07, 5.5, 18], [32.09, 6.6, 18.05],
-  [33.12, 7.7, 18.12], [34.14, 5.5, 18.21]
+  [33.12, 7.7, 18.12], [34.14, 5.5, 18.21],
+  [2.4, 4, -39], [1.6, 6, -38], [3.2, 5, -41],
+  [-5.4, 3, 47], [-7.2, 4, 51], [-4.6, 3.5, 53],
+  [44.6, 4, -24], [42.8, 5, -28], [45.4, 3, -30]
 ];
 
 export const foregroundSailSpecs = [
@@ -54,6 +63,12 @@ export const foregroundSailSpecs = [
   [-11, 0, -36, 0.3, 1.15, -0.3],
   [52.94, 0, -9.05, 0.3, 1.95, 0.2]
 ];
+
+export const paperSpanPath = {
+  start: [-46, -4],
+  end: [22, 28],
+  count: 12
+};
 
 export const planRadii = {
   island: 1.044,

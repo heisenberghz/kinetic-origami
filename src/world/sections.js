@@ -1,3 +1,5 @@
+import { cameraLimits } from "./layout.js";
+
 export const sectionLimits = {
   maxFullDetail: 2,
   visibleRadius: 74,
@@ -94,8 +96,14 @@ export function createSections({ specs, limits = sectionLimits }) {
 export function travelTargetFor(region, fromX, fromZ) {
   const standoff = region.radius * 2.3;
   const approach = Math.atan2(fromX - region.x, fromZ - region.z);
-  const x = region.x + Math.sin(approach) * standoff;
-  const z = region.z + Math.cos(approach) * standoff;
+  let x = region.x + Math.sin(approach) * standoff;
+  let z = region.z + Math.cos(approach) * standoff;
+  const reach = Math.hypot(x, z);
+  if (reach > cameraLimits.playableRadius) {
+    const scale = cameraLimits.playableRadius / reach;
+    x *= scale;
+    z *= scale;
+  }
   return { x, z, yaw: Math.atan2(-(region.x - x), -(region.z - z)) };
 }
 

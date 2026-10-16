@@ -2,6 +2,9 @@ export const travelPresets = {
   cathedral: { x: -14, z: -14.6, yaw: 0 },
   lagoon: { x: -30, z: 11.6, yaw: 0 },
   shoals: { x: 28, z: 12.6, yaw: Math.PI },
+  terraces: { x: 2, z: -26, yaw: 0 },
+  archive: { x: -6, z: 36, yaw: Math.PI },
+  kiln: { x: 44, z: -12, yaw: 0 },
   open: { x: 0, z: 0, yaw: 0.5 }
 };
 

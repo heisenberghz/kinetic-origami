@@ -36,15 +36,17 @@ district position changes, so carrying them forward would point the camera at no
 - ES module project, no build step. `index.html` holds markup and styles only.
 - Modules: `src/main.js` (scene, islands, manta, lotuses, input, UI) and `src/world/` holding `atmosphere.js`, `backdrop.js`, `harness.js`, `horizon.js`, `islands.js`, `landmarks.js`, `layout.js`, `migration.js`, and `ocean.js` (ocean geometry, swell, and the crease field).
 - `src/world/layout.js` is the single source of truth for world positions: regions, islands, lotuses, cranes, sails, and plan radii. Track 4 renames `regions` to districts and moves every position.
-- Seven test suites run on `node --test` with zero dependencies, 52 tests passing: layout, camera, harness, migration, horizon, ocean, and main structure.
+- Eleven test suites run on `node --test` with zero dependencies, 107 tests passing: layout, camera,
+  harness, migration, horizon, ocean, sections, and main structure.
 - Procedural washi, vellum, indigo, vermilion, and gold-leaf visual language.
 - Faceted low-poly paper ocean with persistent crease interaction and an organically wobbled rim.
-- Three district landmarks built today: Folded Cathedral, Lotus Lagoon, Windbreak Shoals. Four more are specified in Track 4.
+- Six district landmarks built today: Folded Cathedral, Lotus Lagoon, Windbreak Shoals, The Terraces,
+  The Archive, and The Kiln, plus the always-visible Paper Span ribbon, covered by layout tests.
 - Distant backdrop ridge rings beyond the ocean edge, unlit and colour pre-blended toward the sky so they recede without relying on scene fog.
 - Manta ray, crane flock, lotus blossoms, paper particles, ribbons, and island forms.
-- Damped orbit camera with zoom, pan, pointer/touch input, keyboard exploration, mood switching, pause,
-  and reduced-motion handling. Track 4 replaces this with first-person free roam; the orbit camera is
-  not yet removed.
+- ~~Damped orbit camera with zoom, pan, pointer/touch input, keyboard exploration, mood switching, pause,
+  and reduced-motion handling.~~ First-person free roam with a drifting presence, click-to-travel,
+  pointer and touch input, keyboard exploration, mood switching, pause, and reduced-motion handling.
 - Field menu replaces the persistent website-style control layer; the plate line reads the current region.
 - Verified manually at approximately 60 FPS on the user's integrated graphics hardware.
 - No audio layer is currently included; audio is a later isolated phase.
@@ -56,14 +58,16 @@ Rather than a phase board that competes with the tracks below, this is a flat st
 
 **Built and verified:**
 
-- Three districts with positions, silhouettes, and satellites, covered by layout tests.
+- ~~Three districts with positions, silhouettes, and satellites, covered by layout tests.~~ Six districts
+  with positions, silhouettes, satellites, and cranes overhead, covered by layout tests.
 - Foreground, midground, and background depth bands, with an organic ocean rim and distant ridge rings.
 - Structural folds: a ridge on one side, a valley on the other, directional light, slow relaxation.
 - Fauna response: cranes migrate, return to their roosts, and startle; the manta leaves a wake that
   merges with player folds; lotus petals and paper motes read fold energy.
 - Mood switching across both palettes, pause, reduced motion, and the Field menu.
 - UI subordination, with the plate line naming the current district.
-- Island instancing: 13 groups became 8 instanced meshes, holding draws at 48 against a ceiling of 50.
+- Island instancing: 13 groups became 8 instanced meshes, holding draws inside the 50 submission ceiling
+  under the two-tier section rule.
 - Seven test suites, 52 tests, no dependencies.
 
 **Built but unverified by hand:** macro and working views, the midnight mood, touch behaviour, the
@@ -111,14 +115,14 @@ once Track 4 Phase 1 lands, because that pose does not exist yet.
 
 # Track 1: World Building — Primary
 
-Status: substantially built. The three original districts, the depth bands, the fauna, and the visual
+Status: substantially built. ~~The three original districts,~~ the depth bands, the fauna, and the visual
 hierarchy all exist in code. Track 4 supersedes the map itself and the camera framing rule.
 
 ## 1. Give the archipelago a map
 
-**Built.** Three districts exist at their original close-spaced positions. Track 4 replaces this map
-with seven districts across a roughly six times larger area, so positions and framing are reworked there.
-These descriptions stay as the character reference for the three that carry forward:
+**Built.** ~~Three districts exist at their original close-spaced positions.~~ The map itself was replaced
+by Track 4, which places seven districts across a roughly six times larger area, so positions and framing
+are reworked there. These descriptions stay as the character reference for the three that carry forward:
 
 ### The Folded Cathedral
 
